@@ -1,5 +1,5 @@
 // Couche d'accès au cloud (Firebase : comptes + Firestore). Seul fichier qui parle à Firebase.
-import * as F from './vendor/firebase.js';
+import * as F from './firebase.js';
 
 const cfg = window.LIFT_FIREBASE;
 export const configured = !!(cfg && cfg.apiKey && cfg.projectId && !/REMPLACE|YOUR_/i.test(cfg.apiKey + cfg.projectId));
