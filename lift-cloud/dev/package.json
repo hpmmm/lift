@@ -1,7 +1,0 @@
-{
-  "name": "lift-vendor",
-  "private": true,
-  "scripts": { "build": "esbuild fb-entry.js --bundle --format=esm --minify --outfile=../vendor/firebase.js" },
-  "dependencies": { "firebase": "*" },
-  "devDependencies": { "esbuild": "*" }
-}
