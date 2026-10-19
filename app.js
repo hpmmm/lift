@@ -358,17 +358,20 @@ const setTxt = s => `${fmt(setW(s))}×${s.r}`;
 function sessionPrompt(w) {
   const lines = w.entries.map(e => {
     const ws = workSets(e), b = best(ws), h = exHistory(e.exId, w.startedAt), p = h[h.length - 1];
-    let l = `- ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}] : ${ws.map(setTxt).join(', ')} | volume ${fmt(entryVol(e))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}`;
+    const wu = e.sets.filter(x => x.done && x.type === 'W' && x.r > 0);
+    let l = `- ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}] : ${wu.length ? `échauffement ${wu.map(setTxt).join(', ')} ; ` : ''}séries de travail ${ws.map(setTxt).join(', ')} | volume ${fmt(entryVol(e))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}`;
     l += p ? ` | séance précédente (${fmtDate(p.t)}) : ${p.sets.map(setTxt).join(', ')} (e1RM ${fmt(Math.round(p.best.e * 10) / 10)})` : ' | première fois enregistrée';
     const older = h.slice(-5, -1);
     if (older.length) l += ` | avant : ` + older.map(o => `${fmtDate(o.t)} ${setTxt(o.sets.reduce((x, y) => e1rm(setW(y), y.r) > e1rm(setW(x), x.r) ? y : x))}`).join(' ; ');
+    if (e.note && e.note.trim()) l += ` | COMMENTAIRE DE L'UTILISATEUR : « ${e.note.trim().replace(/\s+/g, ' ')} »`;
     return l;
   });
   const wk = weeksSummary(4);
   return `${profileLine()}
 
 SÉANCE DU ${fmtDateL(w.startedAt)} « ${w.name} » — durée ${dur(w.endedAt - w.startedAt)}, ${wSets(w)} séries de travail (hors échauffement), volume ${fmt(wVol(w))} kg.
-(Les séries d'échauffement sont exclues.)
+(Les séries d'échauffement sont indiquées à part et exclues du volume, du e1RM et des records.)
+(Un « COMMENTAIRE DE L'UTILISATEUR » explique le contexte d'un exercice — aide d'un partenaire, série délestée, blessure, reprise progressive, etc. Tu dois en tenir compte : une série avec aide ou une charge réduite volontairement n'est pas un échec ni une régression ; adapte la recommandation à la situation décrite, avec prudence en cas de blessure.)
 ${lines.join('\n')}
 
 RECORDS : ${prsFor(w).join(' ; ') || 'aucun'}
@@ -384,6 +387,12 @@ Rédige le bilan :
 Maximum 250 mots.`;
 }
 
+function notesBlock(since) {
+  const out = [];
+  for (const w of finished().filter(x => x.startedAt >= since).sort((a, b) => a.startedAt - b.startedAt))
+    for (const e of w.entries) if (e.note && e.note.trim()) out.push(`- ${fmtDate(w.startedAt)} ${exName(e.exId)} : « ${e.note.trim().replace(/\s+/g, ' ')} »`);
+  return out.length ? `\nCOMMENTAIRES DE L'UTILISATEUR (contexte à prendre en compte : aide d'un partenaire, délestage, blessure, reprise progressive… ; ne pas interpréter ces séances comme de simples plateaux ou régressions) :\n${out.slice(-20).join('\n')}\n` : '';
+}
 function analysisPrompt() {
   const wk = weeksSummary(6), since = wk[0].a;
   const ids = [...new Set(finished().filter(w => w.startedAt >= since).flatMap(w => w.entries.map(e => e.exId)))];
@@ -401,7 +410,7 @@ ${wk.map(x => `- semaine du ${fmtDate(x.a)} : ${x.c} séance(s) — séries : ${
 
 PROGRESSION PAR EXERCICE :
 ${lines.join('\n') || '(aucun exercice avec au moins 2 séances)'}
-
+${notesBlock(since)}
 Rédige une analyse :
 ## Régularité (assiduité par rapport aux ${cfg.perWeek} séances/semaine visées)
 ## Ce qui progresse / ce qui stagne (exercices, avec chiffres)
@@ -595,7 +604,9 @@ function entryHtml(e) {
   }).join('');
   return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b>${eyeBtn(ex(e.exId), 'x')}<button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
     <div class="sethead"><span>SÉRIE</span><span>PRÉC.</span><span>KG</span><span>REPS</span><span></span></div>${rows}
-    <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button></div></section>`;
+    <div class="setbtns"><button data-act="addwarm">+ Échauffement</button><button data-act="rmwarm">− Échauffement</button></div>
+    <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button></div>
+    <textarea class="note-in" data-f="note" rows="2" maxlength="500" placeholder="Commentaire sur cet exercice (aide d'un partenaire, série délestée, blessure…) — lu par le coach IA" aria-label="Commentaire sur l'exercice">${esc(e.note || '')}</textarea></section>`;
 }
 
 function workoutCard(w) {
@@ -726,7 +737,7 @@ function workoutDetail(w, fresh) {
     ${prs.length ? `<div class="lbl sec" style="margin-top:16px">Records</div>${prs.map(p => `<div class="pr">${esc(p)}</div>`).join('')}` : ''}
     <div class="lbl sec" style="margin-top:16px">Coach IA</div><div id="review-box" data-w="${w.id}">${reviewHtml(w)}</div>
     <div class="lbl sec" style="margin-top:16px">Détail</div>
-    ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(exName(e.exId))}</b><div class="chips2">${e.sets.filter(s => s.done).map(s => `<span class="sc ${s.type === 'W' ? 'w' : ''}">${s.type === 'W' ? 'É ' : ''}${fmt(setW(s))}×${s.r}</span>`).join('')}</div></div>`).join('')}
+    ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(exName(e.exId))}</b><div class="chips2">${e.sets.filter(s => s.done).map(s => `<span class="sc ${s.type === 'W' ? 'w' : ''}">${s.type === 'W' ? 'É ' : ''}${fmt(setW(s))}×${s.r}</span>`).join('')}</div>${e.note && e.note.trim() ? `<div class="note-txt">💬 ${esc(e.note.trim())}</div>` : ''}</div>`).join('')}
     <div class="row" style="margin-top:14px"><button class="btn" data-act="saveroutine" data-id="${w.id}">Enregistrer en routine</button>
     ${fresh ? '<button class="btn primary" data-act="closesheet">Fermer</button>' : '<button class="btn" data-act="delw" data-id="' + w.id + '" style="color:#ff8a4c">Supprimer</button>'}</div>`);
   if (fresh && cfg.apiKey && !w.review) runReview(w.id);
@@ -876,6 +887,8 @@ document.addEventListener('click', async ev => {
     case 'newroutine': newRoutine(); break;
     case 'addex': openPicker(ids => { S.active.entries.push(...makeEntries(ids)); persist(); render(); }); break;
     case 'rmex': if (confirm('Retirer cet exercice de la séance ?')) { S.active.entries = S.active.entries.filter(x => x.id !== entry().id); persist(); render(); } break;
+    case 'addwarm': { const e = entry(); let k = 0; while (k < e.sets.length && e.sets[k].type === 'W') k++; e.sets.splice(k, 0, { w: null, r: null, done: false, type: 'W' }); persist(); render(); break; }
+    case 'rmwarm': { const e = entry(); const k = e.sets.map(x => x.type).lastIndexOf('W'); if (k >= 0) { e.sets.splice(k, 1); persist(); render(); } break; }
     case 'addset': entry().sets.push(newSet()); persist(); render(); break;
     case 'rmset': { const e = entry(); if (e.sets.length > 1) { e.sets.pop(); persist(); render(); } break; }
     case 'settype': { const row = t.closest('.set'), s = S.active.entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.type = s.type === 'W' ? 'N' : 'W'; persist(); render(); break; }
@@ -916,6 +929,7 @@ document.addEventListener('input', ev => {
   const t = ev.target;
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
   if (t.dataset.f === 'wname' && S.active) { S.active.name = t.value; persist(); return; }
+  if (t.dataset.f === 'note' && S.active) { const en = S.active.entries.find(x => x.id === t.closest('.entry')?.dataset.e); if (en) { en.note = t.value.slice(0, 500); persist(); } return; }
   if ((t.dataset.f === 'w' || t.dataset.f === 'r') && S.active) {
     const row = t.closest('.set'); if (!row) return;
     const s = S.active.entries.find(x => x.id === row.dataset.e)?.sets[+row.dataset.i]; if (!s) return;
