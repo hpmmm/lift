@@ -248,3 +248,19 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .bf-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 .bf-grid .l{font-size:11px}
 .chat-top .btn{white-space:nowrap;padding:0 12px;font-size:14px}
+
+/* profil */
+#tabs .tab{letter-spacing:.1em;font-size:10px}
+.phead{display:flex;align-items:center;gap:14px;margin:4px 0 14px}
+.avatar{width:58px;height:58px;border-radius:50%;background:var(--panel2);border:2px solid var(--red);box-shadow:var(--glow);display:flex;align-items:center;justify-content:center;font:800 24px var(--mono);color:var(--text);flex:none}
+.pinfo{flex:1;min-width:0}.pinfo b{display:block;font-size:20px;overflow:hidden;text-overflow:ellipsis}
+.pinfo small{font:600 11px var(--mono);letter-spacing:.14em}
+.gear{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);font-size:22px;flex:none}
+.pstats{grid-template-columns:repeat(3,1fr);margin-bottom:6px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{display:flex;align-items:center;gap:10px;min-height:64px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-size:15px;font-weight:650;text-align:left}
+.tile svg{width:24px;height:24px;flex:none;stroke:var(--red);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tile:active{transform:scale(.985)}
+.subhead{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.subhead b{font-size:18px}
+.back{height:38px;padding:0 14px;border-radius:19px;border:1px solid var(--line);background:var(--panel2);font-weight:650;font-size:15px}

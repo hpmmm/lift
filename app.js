@@ -153,7 +153,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 /* ---------- état ---------- */
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
-  chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight',
+  chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight', sub: '', pm: 'dur',
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
 };
@@ -236,7 +236,7 @@ document.addEventListener('focusout', () => { setTimeout(() => { if (S.dirty && 
 
 let unsubs = [];
 function startSession(user) {
-  S.user = user; S.loading = true; S.syncErr = ''; S.tab = 'train';
+  S.user = user; S.loading = true; S.syncErr = ''; S.tab = 'train'; S.sub = '';
   S.auth = { mode: 'login', err: '', info: '', busy: false, email: '' }; render();
   const seen = new Set();
   const ready = k => { seen.add(k); if (seen.size >= 4 && S.loading) { S.loading = false; render(); } };
@@ -380,9 +380,9 @@ async function geminiCall({ contents, system = SYSTEM, json = false, temperature
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
       const m = j?.error?.message || '';
-      if (r.status === 400 && /api key/i.test(m)) throw new Error('Clé API invalide. Vérifie-la dans l’onglet Coach.');
+      if (r.status === 400 && /api key/i.test(m)) throw new Error('Clé API invalide. Vérifie-la dans Profil → Réglages.');
       if (r.status === 403) throw new Error('Accès refusé (clé invalide ou API non autorisée).');
-      if (r.status === 404) throw new Error(`Modèle « ${cfg.model} » introuvable. Change le modèle dans l’onglet Coach.`);
+      if (r.status === 404) throw new Error(`Modèle « ${cfg.model} » introuvable. Change le modèle dans Profil → Réglages.`);
       if (r.status === 429) throw new Error('Quota gratuit atteint. Réessaie dans quelques minutes.');
       throw new Error(`Erreur Gemini (${r.status}). ${m}`.trim());
     }
@@ -391,7 +391,7 @@ async function geminiCall({ contents, system = SYSTEM, json = false, temperature
     return text;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Délai dépassé. Réessaie.');
-    if (e.message === 'NOKEY') throw new Error('Ajoute ta clé Gemini dans l’onglet Coach.');
+    if (e.message === 'NOKEY') throw new Error('Ajoute ta clé Gemini dans Profil → Réglages.');
     if (e instanceof TypeError) throw new Error('Pas de connexion à Gemini (réseau).');
     throw e;
   } finally { clearTimeout(timer); }
@@ -548,9 +548,11 @@ const ICONS = {
   progress: '<svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg>',
   body: '<svg viewBox="0 0 24 24"><circle cx="12" cy="4.8" r="2.2"/><path d="M6.5 9.5 12 8l5.5 1.5M12 8v6M9 21l3-7 3 7"/></svg>',
   chat: '<svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M8 10h8M8 13h5"/></svg>',
+  dumbbell: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>',
+  profile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>',
   coach: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>'
 };
-const TABS = [['train', 'Séance'], ['history', 'Historique'], ['progress', 'Progrès'], ['body', 'Corps'], ['chat', 'Chat'], ['coach', 'Coach']];
+const TABS = [['train', 'Séance'], ['history', 'Historique'], ['chat', 'Chat'], ['profile', 'Profil']];
 
 function render() {
   const y = window.scrollY;
@@ -562,7 +564,7 @@ function render() {
   else {
     tabs = true;
     if (S.active) sign = '<div class="sign on"><i></i>ON AIR</div>';
-    body = syncBanner() + { train: viewTrain, history: viewHistory, progress: viewProgress, body: viewBody, chat: viewChat, coach: viewCoach }[S.tab]();
+    body = syncBanner() + { train: viewTrain, history: viewHistory, chat: viewChat, profile: viewProfile }[S.tab]();
   }
   $('#app').innerHTML = `<header class="top"><div class="logo">LIFT</div>${S.user && !S.loading ? sign : ''}</header><main>${body}</main>`;
   $('#tabs').innerHTML = !tabs ? '' : TABS.map(([k, l]) => `<button class="tab ${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${ICONS[k]}<span>${l}</span>${k === 'train' && S.active ? '<b class="dot"></b>' : ''}</button>`).join('');
@@ -672,11 +674,14 @@ function viewHistory() {
 }
 
 function viewProgress() {
-  const fw = finished();
+  const fw = finished(), a = loadAnalysis();
   const ids = [...new Set(fw.flatMap(w => w.entries.map(e => e.exId)))];
   const rows = ids.map(id => ({ id, h: exHistory(id) })).filter(r => r.h.length).sort((a, b) => b.h[b.h.length - 1].t - a.h[a.h.length - 1].t);
   const now = Date.now(), mu = muscleSets(addDays(now, -7), now + 1), mx = Math.max(20, ...Object.values(mu));
-  return `<div class="lbl" style="margin-bottom:10px">Séries de travail · 7 derniers jours</div>
+  return `<div class="lbl" style="margin-bottom:10px">Analyse de progression</div>
+  <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Gemini analyse tes 6 dernières semaines (régularité, progression, volume par muscle) et propose un plan pour les 2 prochaines.</p>
+  <button class="btn primary" data-act="analyze" id="anbtn">Analyser ma progression</button><div id="anout">${a ? `<div class="review">${md(a.text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>` : ''}</div></section>
+  <div class="lbl sec">Séries de travail · 7 derniers jours</div>
   <section class="card bars">${MUSCLES.map(m => `<div class="b"><span>${m}</span><div class="track"><i style="width:${(mu[m] || 0) / mx * 100}%"></i></div><span class="n">${mu[m] || 0}</span></div>`).join('')}</section>
   <div class="lbl sec">Exercices</div>
   ${rows.map(r => {
@@ -686,17 +691,12 @@ function viewProgress() {
   }).join('') || '<p class="empty">Les courbes de progression apparaîtront après ta première séance.</p>'}`;
 }
 
-function viewCoach() {
-  const a = loadAnalysis();
+function viewSettings() {
   return `${installHint()}
   <div class="lbl" style="margin-bottom:10px">Compte</div>
   <section class="card"><div class="row" style="align-items:center"><div style="min-width:0"><b>${esc(cfg.pseudo || 'Mon compte')}</b><div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis">${esc(S.user ? S.user.email : '')}</div>
     <div style="font:600 11px var(--mono);letter-spacing:.14em;margin-top:6px" class="${navigator.onLine && !S.syncErr ? 'up' : 'down'}">${navigator.onLine && !S.syncErr ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</div></div>
     <button class="btn sm" style="flex:none;width:auto" data-act="logout">Se déconnecter</button></div></section>
-
-  <div class="lbl sec">Analyse de progression</div>
-  <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Gemini analyse tes 6 dernières semaines (régularité, progression, volume par muscle) et propose un plan pour les 2 prochaines.</p>
-  <button class="btn primary" data-act="analyze" id="anbtn">Analyser ma progression</button><div id="anout">${a ? `<div class="review">${md(a.text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>` : ''}</div></section>
 
   <div class="lbl sec">Mon objectif</div>
   <section class="card">
@@ -794,7 +794,7 @@ function workoutDetail(w, fresh) {
 }
 function reviewHtml(w, err) {
   if (w.review) return `<div class="review">${md(w.review.text)}<div class="meta">${new Date(w.review.ts).toLocaleDateString('fr-FR')} · ${esc(w.review.model)}</div></div><button class="btn ghost" data-act="review" data-id="${w.id}">Régénérer le bilan</button>`;
-  return `${err ? `<div class="err">${esc(err)}</div>` : ''}<button class="btn ${cfg.apiKey ? 'primary' : ''}" data-act="review" data-id="${w.id}">Obtenir le bilan IA</button>${cfg.apiKey ? '' : '<small class="note">Ajoute d’abord ta clé Gemini dans l’onglet Coach.</small>'}`;
+  return `${err ? `<div class="err">${esc(err)}</div>` : ''}<button class="btn ${cfg.apiKey ? 'primary' : ''}" data-act="review" data-id="${w.id}">Obtenir le bilan IA</button>${cfg.apiKey ? '' : '<small class="note">Ajoute d’abord ta clé Gemini dans Profil → Réglages.</small>'}`;
 }
 async function runReview(id) {
   const w = S.workouts.find(x => x.id === id); if (!w) return;
@@ -933,7 +933,11 @@ document.addEventListener('click', async ev => {
   unlockAudio();
   const a = t.dataset.act, id = t.dataset.id, entry = () => S.active.entries.find(x => x.id === t.closest('.entry').dataset.e);
   switch (a) {
-    case 'tab': S.tab = t.dataset.t; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
+    case 'tab': S.tab = t.dataset.t; S.sub = ''; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
+    case 'sub': S.sub = t.dataset.s || ''; closeSheet(); render(); window.scrollTo(0, 0); break;
+    case 'pmetric': S.pm = t.dataset.k; render(); break;
+    case 'exbrowse': openExBrowse(); break;
+    case 'exopen': if (exHistory(id).length) exDetail(id); else exView(id); break;
     case 'chat-send': sendChat(); break;
     case 'chat-ex': sendChat(t.dataset.q); break;
     case 'chat-attach': if (!warnImages()) break; pickFile(false, async f => { try { S.chatImg = await resizeImage(f[0]); } catch (e) { S.chatErr = e.message; } render(); }); break;
@@ -998,6 +1002,7 @@ document.addEventListener('click', async ev => {
 
 document.addEventListener('input', ev => {
   const t = ev.target;
+  if (t.id === 'ex-q') { $('#ex-list').innerHTML = exBrowseList(t.value); return; }
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
   if (t.dataset.f === 'chat') { S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; return; }
   if (t.dataset.f === 'wname' && S.active) { S.active.name = t.value; persist(); return; }
@@ -1126,7 +1131,7 @@ const scrollEnd = () => setTimeout(() => window.scrollTo(0, document.body.scroll
 async function sendChat(textOverride) {
   const text = (textOverride != null ? textOverride : S.chatDraft || '').trim();
   if ((!text && !S.chatImg) || S.chatBusy) return;
-  if (!cfg.apiKey) { S.chatErr = 'Ajoute ta clé Gemini dans l’onglet Coach.'; render(); return; }
+  if (!cfg.apiKey) { S.chatErr = 'Ajoute ta clé Gemini dans Profil → Réglages.'; render(); return; }
   const img = S.chatImg, um = { id: uid(), role: 'user', text: text || '(image envoyée)', img: !!img, ts: Date.now() };
   S.chat.push(um); put('chat', um);
   S.chatDraft = ''; S.chatImg = null; S.chatBusy = true; S.chatErr = ''; S.memoSug = []; render(); scrollEnd();
@@ -1239,7 +1244,7 @@ async function extractBody(files) {
   return m;
 }
 async function importBody(files) {
-  if (!cfg.apiKey) { S.bodyMsg = 'Ajoute ta clé Gemini dans l’onglet Coach.'; render(); return; }
+  if (!cfg.apiKey) { S.bodyMsg = 'Ajoute ta clé Gemini dans Profil → Réglages.'; render(); return; }
   S.bodyBusy = true; S.bodyMsg = ''; render();
   try { const m = await extractBody(files); S.bodyBusy = false; render(); bodyForm(m); }
   catch (e) { S.bodyBusy = false; S.bodyMsg = e.message; render(); }
@@ -1268,6 +1273,55 @@ async function analyzeBody() {
     out.innerHTML = `<div class="review">${md(text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>`;
   } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   b.disabled = false;
+}
+
+
+/* ---------- profil (page d'accueil du profil, statistiques, corps, réglages) ---------- */
+function barChart(vals, labels) {
+  const W = 320, H = 150, L = 8, R = 8, T = 10, B = 22, n = vals.length, mx = Math.max(...vals, 1e-9), bw = (W - L - R) / n;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Activité par semaine"><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#272729"/>`
+    + vals.map((v, i) => { const h = v / mx * (H - T - B), x = L + i * bw + 3; return `<rect x="${x}" y="${H - B - h}" width="${bw - 6}" height="${Math.max(h, v > 0 ? 2 : 0)}" rx="3" fill="${i === n - 1 ? '#ff3030' : '#8a2222'}"${i === n - 1 ? ' style="filter:drop-shadow(0 0 4px rgba(255,48,48,.6))"' : ''}/>`; }).join('')
+    + labels.map((l, i) => i % 3 === 0 || i === n - 1 ? `<text x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${l}</text>` : '').join('') + '</svg>';
+}
+function viewProfile() {
+  if (S.sub === 'progress') return subPage('Statistiques', viewProgress());
+  if (S.sub === 'body') return subPage('Corps', viewBody());
+  if (S.sub === 'settings') return subPage('Réglages', viewSettings());
+  const fw = finished(), name = cfg.pseudo || (S.user && S.user.email ? S.user.email.split('@')[0] : 'Moi'), ms = mondayOf(Date.now());
+  const weeks = Array.from({ length: 12 }, (_, i) => addDays(ms, -7 * (11 - i)));
+  const val = w => S.pm === 'vol' ? wVol(w) : S.pm === 'sets' ? wSets(w) : (w.endedAt - w.startedAt) / 3600000;
+  const vals = weeks.map(a => fw.filter(w => w.startedAt >= a && w.startedAt < addDays(a, 7)).reduce((t, w) => t + val(w), 0));
+  const cur = vals[vals.length - 1], unit = S.pm === 'vol' ? 'kg' : S.pm === 'sets' ? 'séries' : 'h';
+  const totalVol = fw.reduce((t, w) => t + wVol(w), 0), totalSets = fw.reduce((t, w) => t + wSets(w), 0);
+  const online = navigator.onLine && !S.syncErr;
+  return `<div class="phead"><div class="avatar">${esc(name.charAt(0).toUpperCase())}</div>
+      <div class="pinfo"><b>${esc(name)}</b><small class="${online ? 'up' : 'down'}">${online ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</small></div>
+      <button class="x gear" data-act="sub" data-s="settings" aria-label="Réglages">⚙</button></div>
+    <div class="stats pstats"><div class="stat"><b>${fw.length}</b><span>Séances</span></div><div class="stat"><b>${totalSets.toLocaleString('fr-FR')}</b><span>Séries</span></div><div class="stat"><b>${totalVol >= 1000 ? fmt(Math.round(totalVol / 100) / 10) + ' t' : Math.round(totalVol) + ' kg'}</b><span>Volume</span></div></div>
+    <div class="lbl sec"><b style="color:var(--text);font:700 16px var(--sans,inherit);letter-spacing:0;text-transform:none">${S.pm === 'dur' ? fmt(Math.round(cur * 10) / 10) : Math.round(cur).toLocaleString('fr-FR')} ${unit}</b> cette semaine</div>
+    <section class="card">${barChart(vals, weeks.map(a => fmtDate(a)))}
+      <div class="chips" style="margin:6px 0 0">${[['dur', 'Durée'], ['vol', 'Volume'], ['sets', 'Séries']].map(([k, l]) => `<button class="chip ${S.pm === k ? 'on' : ''}" data-act="pmetric" data-k="${k}">${l}</button>`).join('')}</div></section>
+    <div class="lbl sec">Tableau de bord</div>
+    <div class="tiles">
+      <button class="tile" data-act="sub" data-s="progress">${ICONS.progress}<span>Statistiques</span></button>
+      <button class="tile" data-act="exbrowse">${ICONS.dumbbell}<span>Exercices</span></button>
+      <button class="tile" data-act="sub" data-s="body">${ICONS.body}<span>Corps</span></button>
+      <button class="tile" data-act="memo-open">${ICONS.chat}<span>Mémoire du coach</span></button>
+    </div>`;
+}
+const subPage = (title, html) => `<div class="subhead"><button class="back" data-act="sub" data-s="">‹ Profil</button><b>${title}</b></div>${html}`;
+
+/* catalogue complet des exercices (avec illustrations) */
+function exBrowseList(q) {
+  const toks = norm(q || '').split(/\s+/).filter(Boolean);
+  const list = S.exercises.filter(e => !toks.length || toks.every(tk => norm(e.name + ' ' + e.muscle + (/\(Smith\)/.test(e.name) ? ' smith machine barre guidee' : '')).includes(tk)))
+    .sort((a, b) => MUSCLES.indexOf(a.muscle) - MUSCLES.indexOf(b.muscle) || a.name.localeCompare(b.name, 'fr'));
+  return list.map(e => `<div class="pk-row"><button class="pk-item" data-act="exopen" data-id="${e.id}">${thumb(e)}<span class="pk-n">${esc(e.name)}</span><small>${esc(e.muscle)}</small></button>${eyeBtn(e, 'pk-eye')}</div>`).join('') || '<p class="empty">Aucun résultat.</p>';
+}
+function openExBrowse() {
+  sheet(`<h3>Exercices (${S.exercises.length})</h3><input id="ex-q" class="field" placeholder="Rechercher (ex. smith, dos, curl)" autocomplete="off">
+    <p class="muted" style="margin:-4px 0 8px;font-size:13px">Touche 👁 pour voir l’illustration et les muscles. Touche le nom pour voir ta progression.</p>
+    <div id="ex-list" class="pk-list" style="max-height:60vh">${exBrowseList('')}</div>`);
 }
 
 /* ---------- démarrage ---------- */
