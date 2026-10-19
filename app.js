@@ -131,8 +131,8 @@ const GOALS = {
 const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
-// Réglages synchronisés entre appareils (SYNCED) ; clé API et modèle restent propres à chaque appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '' };
+// Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '' };
 const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
@@ -142,7 +142,11 @@ const saveCfg = () => {
   storeCfg();
   if (!S.user) return;
   clearTimeout(cfgTimer);
-  cfgTimer = setTimeout(() => backend.saveSettings(S.user.uid, Object.fromEntries(SYNCED.map(k => [k, cfg[k]]))).catch(syncError), 600);
+  cfgTimer = setTimeout(() => {
+    const o = Object.fromEntries(SYNCED.map(k => [k, cfg[k]]));
+    o.syncKey = !!cfg.syncKey; o.apiKey = cfg.syncKey ? cfg.apiKey : '';
+    backend.saveSettings(S.user.uid, o).catch(syncError);
+  }, 600);
 };
 const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.analysis') || 'null'); } catch (e) { return null; } };
 
@@ -207,7 +211,9 @@ function endSession() {
   S.user = null; S.workouts = []; S.routines = []; S.custom = []; rebuildEx(); S.active = null; S.loading = false; S.syncErr = '';
   S.auth = { mode: 'login', err: '', info: '', busy: false, email: '' };
   // Rien du compte précédent ne doit rester visible ni être recopié dans le prochain compte.
-  SYNCED.forEach(k => { cfg[k] = DEF[k]; }); storeCfg();
+  SYNCED.forEach(k => { cfg[k] = DEF[k]; });
+  if (cfg.syncKey) { cfg.apiKey = ''; cfg.syncKey = false; } // clé synchronisée : retirée de cet appareil à la déconnexion (elle reste dans le compte)
+  storeCfg();
   try { localStorage.removeItem('lift.analysis'); } catch (e) { }
   rest = null; drawRest(); unwake(); closeSheet(); render();
 }
@@ -238,6 +244,10 @@ function applySettings(s) {
   if (!s) { saveCfg(); return; } // premier compte : on crée le document de réglages
   let ch = false;
   SYNCED.forEach(k => { if (s[k] !== undefined && s[k] !== cfg[k]) { cfg[k] = s[k]; ch = true; } });
+  if (s.syncKey === true) {
+    if (!cfg.syncKey) { cfg.syncKey = true; ch = true; }
+    if (s.apiKey && s.apiKey !== cfg.apiKey) { cfg.apiKey = s.apiKey; ch = true; }
+  } else if (s.syncKey === false && cfg.syncKey) { cfg.syncKey = false; ch = true; }
   if (ch) { storeCfg(); renderSoft(); }
 }
 
@@ -642,9 +652,10 @@ function viewCoach() {
 
   <div class="lbl sec">Connexion Gemini</div>
   <section class="card">
-    <small class="note">L'app utilise l'API Gemini (gratuite avec limites), pas ton abonnement. Crée une clé sur <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Elle reste stockée uniquement sur cet appareil (pas dans le cloud) : saisis-la une fois sur chaque appareil. Chacun utilise sa propre clé gratuite.</small>
+    <small class="note">L'app utilise l'API Gemini (gratuite avec limites), pas ton abonnement. Crée une clé sur <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Par défaut elle reste uniquement sur cet appareil. Coche l'option ci-dessous pour la retrouver automatiquement sur tes autres appareils. Chacun utilise sa propre clé gratuite.</small>
     <label class="l" style="margin-top:0">Clé API</label>
     <input class="field" type="password" data-cfg="apiKey" placeholder="AIza…" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(cfg.apiKey)}">
+    <label class="l" style="display:flex;gap:10px;align-items:flex-start;text-transform:none;letter-spacing:0;font-size:14px"><input type="checkbox" data-cfg="syncKey" ${cfg.syncKey ? 'checked' : ''} style="margin-top:3px"><span>Synchroniser ma clé entre mes appareils<br><small class="note">Elle est alors enregistrée dans ton compte (visible uniquement par toi et par l'administrateur de l'app) et retirée de l'appareil à la déconnexion.</small></span></label>
     <label class="l">Modèle</label>
     <input class="field" data-cfg="model" list="models" autocapitalize="off" spellcheck="false" value="${esc(cfg.model)}">
     <datalist id="models"><option value="gemini-3.5-flash"><option value="gemini-3.1-flash-lite"><option value="gemini-2.5-flash"><option value="gemini-2.5-flash-lite"></datalist>
@@ -916,6 +927,7 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => {
   const k = ev.target.dataset.cfg; if (!k) return;
   let v = ev.target.value;
+  if (k === 'syncKey') v = ev.target.checked;
   if (k === 'rest') v = Math.min(600, Math.max(10, Math.round(num(v) || 90)));
   if (k === 'apiKey') v = v.trim();
   if (k === 'model') v = v.trim() || DEF.model;
