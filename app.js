@@ -29,9 +29,21 @@ const standalone = () => navigator.standalone === true || (window.matchMedia && 
 /* ---------- données de base ---------- */
 const MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Biceps', 'Triceps', 'Quadriceps', 'Ischios', 'Fessiers', 'Mollets', 'Abdos'];
 const SEED = {
-  Pectoraux: ['Développé couché (barre)', 'Développé couché (haltères)', 'Développé incliné (barre)', 'Développé incliné (haltères)', 'Développé couché (machine)', 'Développé incliné (machine)', 'Pec deck (butterfly)', 'Écartés poulie vis-à-vis', 'Dips (pectoraux)', 'Pompes'],
+  Pectoraux: [
+    { name: 'Développé couché (barre)', img: 'https://upload.wikimedia.org/wikipedia/commons/8/82/Bench-press-1.svg' },
+    { name: 'Développé couché (haltères)' },
+    { name: 'Développé incliné (barre)' },
+    { name: 'Développé incliné (haltères)' },
+    { name: 'Développé couché (machine)' },
+    { name: 'Développé incliné (machine)' },
+    { name: 'Pec deck (butterfly)' },
+    { name: 'Écartés poulie vis-à-vis' },
+    { name: 'Dips (pectoraux)' },
+    { name: 'Pompes' },
+    { name: 'Développé couché (Smith machine)', img: 'https://upload.wikimedia.org/wikipedia/commons/8/82/Bench-press-1.svg' },
+    { name: 'Développé incliné (Smith machine)' }],
   Dos: ['Tractions', 'Tirage vertical (poulie haute)', 'Tirage horizontal (poulie basse)', 'Rowing barre', 'Rowing haltère (unilatéral)', 'Rowing machine', 'Pull-over poulie', 'Soulevé de terre', 'Shrugs'],
-  'Épaules': ['Développé militaire (barre)', 'Développé épaules (haltères)', 'Développé épaules (machine)', 'Élévations latérales (haltères)', 'Élévations latérales (poulie)', 'Élévations latérales (machine)', 'Oiseau (haltères)', 'Reverse pec deck', 'Face pull'],
+  'Épaules': ['Développé militaire (barre)', 'Développé épaules (haltères)', 'Développé épaules (machine)', 'Élévations latérales (haltères)', 'Élévations latérales (poulie)', 'Élévations latérales (machine)', 'Oiseau (haltères)', 'Reverse pec deck', 'Face pull' 'Développé épaules (Smith machine)'],
   Biceps: ['Curl barre', 'Curl haltères', 'Curl incliné', 'Curl marteau', 'Curl pupitre (machine)', 'Curl poulie basse'],
   Triceps: ['Extension poulie haute (corde)', 'Extension poulie haute (barre)', 'Barre au front', 'Dips (triceps)', 'Extension nuque (haltère)', 'Extension triceps (machine)', 'Kickback poulie'],
   Quadriceps: ['Squat (barre)', 'Squat (Smith)', 'Presse à cuisses', 'Leg extension', 'Hack squat', 'Fentes marchées', 'Squat bulgare'],
