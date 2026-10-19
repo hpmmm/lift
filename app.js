@@ -28,99 +28,99 @@ const standalone = () => navigator.standalone === true || (window.matchMedia && 
 
 /* ---------- données de base ---------- */
 const MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Biceps', 'Triceps', 'Quadriceps', 'Ischios', 'Fessiers', 'Mollets', 'Abdos'];
-// Catalogue des exercices pré-chargés : [identifiant, nom, groupe musculaire, image].
+// Catalogue des exercices pré-chargés : [identifiant, nom, groupe musculaire, image, muscles principaux, muscles secondaires].
 // ⚠️ Chaque identifiant est DÉFINITIF (l'historique des utilisateurs y fait référence) : ne jamais renuméroter,
 // réordonner, supprimer ni réutiliser un identifiant. Pour ajouter un exercice : AJOUTER une ligne À LA FIN avec le
 // prochain identifiant libre (x87, x88…). Image = identifiant de l'exercice dans la base libre « free-exercise-db »
 // (domaine public), ou null s'il n'y en a pas de fiable.
 const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
 const CATALOG = [
-  ['x1', 'Développé couché (barre)', 'Pectoraux', 'Barbell_Bench_Press_-_Medium_Grip'],
-  ['x2', 'Développé couché (haltères)', 'Pectoraux', 'Dumbbell_Bench_Press'],
-  ['x3', 'Développé incliné (barre)', 'Pectoraux', 'Barbell_Incline_Bench_Press_-_Medium_Grip'],
-  ['x4', 'Développé incliné (haltères)', 'Pectoraux', 'Incline_Dumbbell_Press'],
-  ['x5', 'Développé couché (machine)', 'Pectoraux', 'Machine_Bench_Press'],
-  ['x6', 'Développé incliné (machine)', 'Pectoraux', 'Leverage_Incline_Chest_Press'],
-  ['x7', 'Pec deck (butterfly)', 'Pectoraux', 'Butterfly'],
-  ['x8', 'Écartés poulie vis-à-vis', 'Pectoraux', 'Cable_Crossover'],
-  ['x9', 'Dips (pectoraux)', 'Pectoraux', 'Dips_-_Chest_Version'],
-  ['x10', 'Pompes', 'Pectoraux', 'Pushups'],
-  ['x11', 'Tractions', 'Dos', 'Pullups'],
-  ['x12', 'Tirage vertical (poulie haute)', 'Dos', 'Wide-Grip_Lat_Pulldown'],
-  ['x13', 'Tirage horizontal (poulie basse)', 'Dos', 'Seated_Cable_Rows'],
-  ['x14', 'Rowing barre', 'Dos', 'Bent_Over_Barbell_Row'],
-  ['x15', 'Rowing haltère (unilatéral)', 'Dos', 'One-Arm_Dumbbell_Row'],
-  ['x16', 'Rowing machine', 'Dos', 'Leverage_High_Row'],
-  ['x17', 'Pull-over poulie', 'Dos', 'Straight-Arm_Pulldown'],
-  ['x18', 'Soulevé de terre', 'Dos', 'Barbell_Deadlift'],
-  ['x19', 'Shrugs', 'Dos', 'Barbell_Shrug'],
-  ['x20', 'Développé militaire (barre)', 'Épaules', 'Standing_Military_Press'],
-  ['x21', 'Développé épaules (haltères)', 'Épaules', 'Dumbbell_Shoulder_Press'],
-  ['x22', 'Développé épaules (machine)', 'Épaules', 'Machine_Shoulder_Military_Press'],
-  ['x23', 'Élévations latérales (haltères)', 'Épaules', 'Side_Lateral_Raise'],
-  ['x24', 'Élévations latérales (poulie)', 'Épaules', 'Standing_Low-Pulley_Deltoid_Raise'],
-  ['x25', 'Élévations latérales (machine)', 'Épaules', null],
-  ['x26', 'Oiseau (haltères)', 'Épaules', 'Reverse_Flyes'],
-  ['x27', 'Reverse pec deck', 'Épaules', 'Reverse_Machine_Flyes'],
-  ['x28', 'Face pull', 'Épaules', 'Face_Pull'],
-  ['x29', 'Curl barre', 'Biceps', 'Barbell_Curl'],
-  ['x30', 'Curl haltères', 'Biceps', 'Dumbbell_Bicep_Curl'],
-  ['x31', 'Curl incliné', 'Biceps', 'Incline_Dumbbell_Curl'],
-  ['x32', 'Curl marteau', 'Biceps', 'Hammer_Curls'],
-  ['x33', 'Curl pupitre (machine)', 'Biceps', 'Machine_Preacher_Curls'],
-  ['x34', 'Curl poulie basse', 'Biceps', 'Standing_Biceps_Cable_Curl'],
-  ['x35', 'Extension poulie haute (corde)', 'Triceps', 'Triceps_Pushdown_-_Rope_Attachment'],
-  ['x36', 'Extension poulie haute (barre)', 'Triceps', 'Triceps_Pushdown'],
-  ['x37', 'Barre au front', 'Triceps', 'EZ-Bar_Skullcrusher'],
-  ['x38', 'Dips (triceps)', 'Triceps', 'Dips_-_Triceps_Version'],
-  ['x39', 'Extension nuque (haltère)', 'Triceps', 'Standing_Dumbbell_Triceps_Extension'],
-  ['x40', 'Extension triceps (machine)', 'Triceps', 'Machine_Triceps_Extension'],
-  ['x41', 'Kickback poulie', 'Triceps', null],
-  ['x42', 'Squat (barre)', 'Quadriceps', 'Barbell_Full_Squat'],
-  ['x43', 'Squat (Smith)', 'Quadriceps', 'Smith_Machine_Squat'],
-  ['x44', 'Presse à cuisses', 'Quadriceps', 'Leg_Press'],
-  ['x45', 'Leg extension', 'Quadriceps', 'Leg_Extensions'],
-  ['x46', 'Hack squat', 'Quadriceps', 'Hack_Squat'],
-  ['x47', 'Fentes marchées', 'Quadriceps', 'Bodyweight_Walking_Lunge'],
-  ['x48', 'Squat bulgare', 'Quadriceps', null],
-  ['x49', 'Leg curl assis', 'Ischios', 'Seated_Leg_Curl'],
-  ['x50', 'Leg curl allongé', 'Ischios', 'Lying_Leg_Curls'],
-  ['x51', 'Soulevé de terre jambes tendues', 'Ischios', 'Stiff-Legged_Barbell_Deadlift'],
-  ['x52', 'Good morning', 'Ischios', 'Good_Morning'],
-  ['x53', 'Hip thrust', 'Fessiers', 'Barbell_Hip_Thrust'],
-  ['x54', 'Hip thrust (machine)', 'Fessiers', null],
-  ['x55', 'Abduction (machine)', 'Fessiers', 'Thigh_Abductor'],
-  ['x56', 'Kickback poulie (fessiers)', 'Fessiers', 'One-Legged_Cable_Kickback'],
-  ['x57', 'Mollets debout (machine)', 'Mollets', 'Standing_Calf_Raises'],
-  ['x58', 'Mollets assis (machine)', 'Mollets', 'Seated_Calf_Raise'],
-  ['x59', 'Mollets à la presse', 'Mollets', 'Calf_Press_On_The_Leg_Press_Machine'],
-  ['x60', 'Crunch poulie', 'Abdos', 'Cable_Crunch'],
-  ['x61', 'Crunch (machine)', 'Abdos', 'Ab_Crunch_Machine'],
-  ['x62', 'Relevé de jambes', 'Abdos', 'Hanging_Leg_Raise'],
-  ['x63', 'Roue abdominale', 'Abdos', 'Ab_Roller'],
-  ['x64', 'Développé couché (Smith)', 'Pectoraux', 'Smith_Machine_Bench_Press'],
-  ['x65', 'Développé incliné (Smith)', 'Pectoraux', 'Smith_Machine_Incline_Bench_Press'],
-  ['x66', 'Développé décliné (Smith)', 'Pectoraux', 'Smith_Machine_Decline_Press'],
-  ['x67', 'Développé couché prise serrée (Smith)', 'Triceps', 'Smith_Machine_Close-Grip_Bench_Press'],
-  ['x68', 'Rowing penché (Smith)', 'Dos', 'Smith_Machine_Bent_Over_Row'],
-  ['x69', 'Développé épaules (Smith)', 'Épaules', 'Smith_Machine_Overhead_Shoulder_Press'],
-  ['x70', 'Tirage menton (Smith)', 'Épaules', 'Smith_Machine_Upright_Row'],
-  ['x71', 'Split squat (Smith)', 'Quadriceps', 'Smith_Single-Leg_Split_Squat'],
-  ['x72', 'Soulevé de terre jambes tendues (Smith)', 'Ischios', 'Smith_Machine_Stiff-Legged_Deadlift'],
-  ['x73', 'Mollets debout (Smith)', 'Mollets', 'Smith_Machine_Calf_Raise'],
-  ['x74', 'Shrugs dans le dos (Smith)', 'Dos', 'Smith_Machine_Behind_the_Back_Shrug'],
-  ['x75', 'Hip thrust (Smith)', 'Fessiers', null],
-  ['x76', 'Développé décliné (barre)', 'Pectoraux', 'Decline_Barbell_Bench_Press'],
-  ['x77', 'Écartés couché (haltères)', 'Pectoraux', 'Dumbbell_Flyes'],
-  ['x78', 'Développé couché prise serrée (barre)', 'Triceps', 'Close-Grip_Barbell_Bench_Press'],
-  ['x79', 'Tirage vertical prise serrée', 'Dos', 'Close-Grip_Front_Lat_Pulldown'],
-  ['x80', 'Rowing T-bar', 'Dos', 'T-Bar_Row_with_Handle'],
-  ['x81', 'Extension lombaires (banc à 45°)', 'Dos', 'Hyperextensions_Back_Extensions'],
-  ['x82', 'Arnold press', 'Épaules', 'Arnold_Dumbbell_Press'],
-  ['x83', 'Élévations frontales (haltères)', 'Épaules', 'Front_Dumbbell_Raise'],
-  ['x84', 'Curl concentré', 'Biceps', 'Concentration_Curls'],
-  ['x85', 'Fentes (haltères)', 'Quadriceps', 'Dumbbell_Lunges'],
-  ['x86', 'Crunch au sol', 'Abdos', 'Crunches'],
+  ['x1', 'Développé couché (barre)', 'Pectoraux', 'Barbell_Bench_Press_-_Medium_Grip', 'chest', 'shoulders,triceps'],
+  ['x2', 'Développé couché (haltères)', 'Pectoraux', 'Dumbbell_Bench_Press', 'chest', 'shoulders,triceps'],
+  ['x3', 'Développé incliné (barre)', 'Pectoraux', 'Barbell_Incline_Bench_Press_-_Medium_Grip', 'chest', 'shoulders,triceps'],
+  ['x4', 'Développé incliné (haltères)', 'Pectoraux', 'Incline_Dumbbell_Press', 'chest', 'shoulders,triceps'],
+  ['x5', 'Développé couché (machine)', 'Pectoraux', 'Machine_Bench_Press', 'chest', 'shoulders,triceps'],
+  ['x6', 'Développé incliné (machine)', 'Pectoraux', 'Leverage_Incline_Chest_Press', 'chest', 'shoulders,triceps'],
+  ['x7', 'Pec deck (butterfly)', 'Pectoraux', 'Butterfly', 'chest', ''],
+  ['x8', 'Écartés poulie vis-à-vis', 'Pectoraux', 'Cable_Crossover', 'chest', 'shoulders'],
+  ['x9', 'Dips (pectoraux)', 'Pectoraux', 'Dips_-_Chest_Version', 'chest', 'shoulders,triceps'],
+  ['x10', 'Pompes', 'Pectoraux', 'Pushups', 'chest', 'shoulders,triceps'],
+  ['x11', 'Tractions', 'Dos', 'Pullups', 'lats', 'biceps,middle back'],
+  ['x12', 'Tirage vertical (poulie haute)', 'Dos', 'Wide-Grip_Lat_Pulldown', 'lats', 'biceps,middle back,shoulders'],
+  ['x13', 'Tirage horizontal (poulie basse)', 'Dos', 'Seated_Cable_Rows', 'middle back', 'biceps,lats,shoulders'],
+  ['x14', 'Rowing barre', 'Dos', 'Bent_Over_Barbell_Row', 'middle back', 'biceps,lats,shoulders'],
+  ['x15', 'Rowing haltère (unilatéral)', 'Dos', 'One-Arm_Dumbbell_Row', 'middle back', 'biceps,lats,shoulders'],
+  ['x16', 'Rowing machine', 'Dos', 'Leverage_High_Row', 'middle back', 'lats'],
+  ['x17', 'Pull-over poulie', 'Dos', 'Straight-Arm_Pulldown', 'lats', ''],
+  ['x18', 'Soulevé de terre', 'Dos', 'Barbell_Deadlift', 'lower back', 'calves,forearms,glutes,hamstrings,lats,middle back,quadriceps,traps'],
+  ['x19', 'Shrugs', 'Dos', 'Barbell_Shrug', 'traps', ''],
+  ['x20', 'Développé militaire (barre)', 'Épaules', 'Standing_Military_Press', 'shoulders', 'triceps'],
+  ['x21', 'Développé épaules (haltères)', 'Épaules', 'Dumbbell_Shoulder_Press', 'shoulders', 'triceps'],
+  ['x22', 'Développé épaules (machine)', 'Épaules', 'Machine_Shoulder_Military_Press', 'shoulders', 'triceps'],
+  ['x23', 'Élévations latérales (haltères)', 'Épaules', 'Side_Lateral_Raise', 'shoulders', ''],
+  ['x24', 'Élévations latérales (poulie)', 'Épaules', 'Standing_Low-Pulley_Deltoid_Raise', 'shoulders', 'forearms'],
+  ['x25', 'Élévations latérales (machine)', 'Épaules', null, 'shoulders', 'traps'],
+  ['x26', 'Oiseau (haltères)', 'Épaules', 'Reverse_Flyes', 'shoulders', ''],
+  ['x27', 'Reverse pec deck', 'Épaules', 'Reverse_Machine_Flyes', 'shoulders', ''],
+  ['x28', 'Face pull', 'Épaules', 'Face_Pull', 'shoulders', 'middle back'],
+  ['x29', 'Curl barre', 'Biceps', 'Barbell_Curl', 'biceps', 'forearms'],
+  ['x30', 'Curl haltères', 'Biceps', 'Dumbbell_Bicep_Curl', 'biceps', 'forearms'],
+  ['x31', 'Curl incliné', 'Biceps', 'Incline_Dumbbell_Curl', 'biceps', ''],
+  ['x32', 'Curl marteau', 'Biceps', 'Hammer_Curls', 'biceps', ''],
+  ['x33', 'Curl pupitre (machine)', 'Biceps', 'Machine_Preacher_Curls', 'biceps', ''],
+  ['x34', 'Curl poulie basse', 'Biceps', 'Standing_Biceps_Cable_Curl', 'biceps', ''],
+  ['x35', 'Extension poulie haute (corde)', 'Triceps', 'Triceps_Pushdown_-_Rope_Attachment', 'triceps', ''],
+  ['x36', 'Extension poulie haute (barre)', 'Triceps', 'Triceps_Pushdown', 'triceps', ''],
+  ['x37', 'Barre au front', 'Triceps', 'EZ-Bar_Skullcrusher', 'triceps', 'forearms'],
+  ['x38', 'Dips (triceps)', 'Triceps', 'Dips_-_Triceps_Version', 'triceps', 'chest,shoulders'],
+  ['x39', 'Extension nuque (haltère)', 'Triceps', 'Standing_Dumbbell_Triceps_Extension', 'triceps', ''],
+  ['x40', 'Extension triceps (machine)', 'Triceps', 'Machine_Triceps_Extension', 'triceps', ''],
+  ['x41', 'Kickback poulie', 'Triceps', null, 'triceps', 'shoulders'],
+  ['x42', 'Squat (barre)', 'Quadriceps', 'Barbell_Full_Squat', 'quadriceps', 'calves,glutes,hamstrings,lower back'],
+  ['x43', 'Squat (Smith)', 'Quadriceps', 'Smith_Machine_Squat', 'quadriceps', 'calves,glutes,hamstrings,lower back'],
+  ['x44', 'Presse à cuisses', 'Quadriceps', 'Leg_Press', 'quadriceps', 'calves,glutes,hamstrings'],
+  ['x45', 'Leg extension', 'Quadriceps', 'Leg_Extensions', 'quadriceps', ''],
+  ['x46', 'Hack squat', 'Quadriceps', 'Hack_Squat', 'quadriceps', 'calves,glutes,hamstrings'],
+  ['x47', 'Fentes marchées', 'Quadriceps', 'Bodyweight_Walking_Lunge', 'quadriceps', 'calves,glutes,hamstrings'],
+  ['x48', 'Squat bulgare', 'Quadriceps', null, 'quadriceps', 'glutes,hamstrings,adductors'],
+  ['x49', 'Leg curl assis', 'Ischios', 'Seated_Leg_Curl', 'hamstrings', ''],
+  ['x50', 'Leg curl allongé', 'Ischios', 'Lying_Leg_Curls', 'hamstrings', ''],
+  ['x51', 'Soulevé de terre jambes tendues', 'Ischios', 'Stiff-Legged_Barbell_Deadlift', 'hamstrings', 'glutes,lower back'],
+  ['x52', 'Good morning', 'Ischios', 'Good_Morning', 'hamstrings', 'abdominals,glutes,lower back'],
+  ['x53', 'Hip thrust', 'Fessiers', 'Barbell_Hip_Thrust', 'glutes', 'calves,hamstrings'],
+  ['x54', 'Hip thrust (machine)', 'Fessiers', null, 'glutes', 'hamstrings,quadriceps'],
+  ['x55', 'Abduction (machine)', 'Fessiers', 'Thigh_Abductor', 'abductors', 'glutes'],
+  ['x56', 'Kickback poulie (fessiers)', 'Fessiers', 'One-Legged_Cable_Kickback', 'glutes', 'hamstrings'],
+  ['x57', 'Mollets debout (machine)', 'Mollets', 'Standing_Calf_Raises', 'calves', ''],
+  ['x58', 'Mollets assis (machine)', 'Mollets', 'Seated_Calf_Raise', 'calves', ''],
+  ['x59', 'Mollets à la presse', 'Mollets', 'Calf_Press_On_The_Leg_Press_Machine', 'calves', ''],
+  ['x60', 'Crunch poulie', 'Abdos', 'Cable_Crunch', 'abdominals', ''],
+  ['x61', 'Crunch (machine)', 'Abdos', 'Ab_Crunch_Machine', 'abdominals', ''],
+  ['x62', 'Relevé de jambes', 'Abdos', 'Hanging_Leg_Raise', 'abdominals', ''],
+  ['x63', 'Roue abdominale', 'Abdos', 'Ab_Roller', 'abdominals', 'shoulders'],
+  ['x64', 'Développé couché (Smith)', 'Pectoraux', 'Smith_Machine_Bench_Press', 'chest', 'shoulders,triceps'],
+  ['x65', 'Développé incliné (Smith)', 'Pectoraux', 'Smith_Machine_Incline_Bench_Press', 'chest', 'shoulders,triceps'],
+  ['x66', 'Développé décliné (Smith)', 'Pectoraux', 'Smith_Machine_Decline_Press', 'chest', 'shoulders,triceps'],
+  ['x67', 'Développé couché prise serrée (Smith)', 'Triceps', 'Smith_Machine_Close-Grip_Bench_Press', 'triceps', 'chest,shoulders'],
+  ['x68', 'Rowing penché (Smith)', 'Dos', 'Smith_Machine_Bent_Over_Row', 'middle back', 'biceps,lats,shoulders'],
+  ['x69', 'Développé épaules (Smith)', 'Épaules', 'Smith_Machine_Overhead_Shoulder_Press', 'shoulders', 'triceps'],
+  ['x70', 'Tirage menton (Smith)', 'Épaules', 'Smith_Machine_Upright_Row', 'traps', 'biceps,middle back,shoulders'],
+  ['x71', 'Split squat (Smith)', 'Quadriceps', 'Smith_Single-Leg_Split_Squat', 'quadriceps', 'calves,glutes,hamstrings'],
+  ['x72', 'Soulevé de terre jambes tendues (Smith)', 'Ischios', 'Smith_Machine_Stiff-Legged_Deadlift', 'hamstrings', 'glutes,lower back'],
+  ['x73', 'Mollets debout (Smith)', 'Mollets', 'Smith_Machine_Calf_Raise', 'calves', ''],
+  ['x74', 'Shrugs dans le dos (Smith)', 'Dos', 'Smith_Machine_Behind_the_Back_Shrug', 'traps', 'shoulders'],
+  ['x75', 'Hip thrust (Smith)', 'Fessiers', null, 'glutes', 'hamstrings,quadriceps'],
+  ['x76', 'Développé décliné (barre)', 'Pectoraux', 'Decline_Barbell_Bench_Press', 'chest', 'shoulders,triceps'],
+  ['x77', 'Écartés couché (haltères)', 'Pectoraux', 'Dumbbell_Flyes', 'chest', ''],
+  ['x78', 'Développé couché prise serrée (barre)', 'Triceps', 'Close-Grip_Barbell_Bench_Press', 'triceps', 'chest,shoulders'],
+  ['x79', 'Tirage vertical prise serrée', 'Dos', 'Close-Grip_Front_Lat_Pulldown', 'lats', 'biceps,middle back,shoulders'],
+  ['x80', 'Rowing T-bar', 'Dos', 'T-Bar_Row_with_Handle', 'middle back', 'biceps,lats'],
+  ['x81', 'Extension lombaires (banc à 45°)', 'Dos', 'Hyperextensions_Back_Extensions', 'lower back', 'glutes,hamstrings'],
+  ['x82', 'Arnold press', 'Épaules', 'Arnold_Dumbbell_Press', 'shoulders', 'triceps'],
+  ['x83', 'Élévations frontales (haltères)', 'Épaules', 'Front_Dumbbell_Raise', 'shoulders', ''],
+  ['x84', 'Curl concentré', 'Biceps', 'Concentration_Curls', 'biceps', 'forearms'],
+  ['x85', 'Fentes (haltères)', 'Quadriceps', 'Dumbbell_Lunges', 'quadriceps', 'calves,glutes,hamstrings'],
+  ['x86', 'Crunch au sol', 'Abdos', 'Crunches', 'abdominals', ''],
 ];
 const GOALS = {
   hypertrophie: { label: 'Prise de muscle', ia: 'prise de muscle (hypertrophie)' },
@@ -156,14 +156,55 @@ const S = {
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
 };
-const SEEDS = CATALOG.map(([id, name, muscle, img]) => ({ id, name, muscle, img, custom: false }));
+const SEEDS = CATALOG.map(([id, name, muscle, img, p, q]) => ({ id, name, muscle, img, prim: p ? p.split(',') : [], sec: q ? q.split(',') : [], custom: false }));
 const rebuildEx = () => { S.exercises = [...SEEDS, ...S.custom]; };
 rebuildEx();
 const ex = id => S.exercises.find(e => e.id === id);
 const exName = id => ex(id)?.name || 'Exercice supprimé';
+/* carte musculaire (corps stylisé dessiné pour l'app) */
+const MU_FR = { abdominals: 'Abdos', abductors: 'Abducteurs', adductors: 'Adducteurs', biceps: 'Biceps', calves: 'Mollets', chest: 'Pectoraux', forearms: 'Avant-bras', glutes: 'Fessiers', hamstrings: 'Ischios', lats: 'Grands dorsaux', 'lower back': 'Lombaires', 'middle back': 'Milieu du dos', quadriceps: 'Quadriceps', shoulders: 'Épaules', traps: 'Trapèzes', triceps: 'Triceps' };
+const BODY_BASE = ['M100 56 C124 58 146 62 156 76 C162 96 146 108 140 128 C137 150 138 180 142 206 C142 218 126 226 100 226 Z', 'M101 224 L142 206 C148 250 140 292 132 330 C130 372 126 404 124 424 L106 424 L103 330 C102 300 101 260 101 224 Z', 'M154 100 C164 98 170 112 170 130 C172 160 176 190 174 214 C172 224 162 224 160 212 C156 190 154 150 152 120 Z'];
+const BODY_F = {
+  traps: 'M100 50 L112 55 C124 60 134 66 136 70 L118 72 L100 62 Z',
+  shoulders: 'M138 70 C152 66 164 74 166 88 C166 100 160 104 154 102 C146 96 140 84 138 70 Z',
+  chest: 'M102 74 C114 70 132 71 142 82 C146 94 140 108 124 112 C112 114 104 108 102 100 Z',
+  biceps: 'M156 104 C164 104 168 114 168 128 C167 140 162 146 158 146 C154 140 152 124 154 112 Z',
+  forearms: 'M158 150 C166 148 172 160 172 178 C171 194 168 204 164 206 C160 196 156 172 158 150 Z',
+  abdominals: 'M102 116 L120 116 L120 134 L102 134 Z M102 137 L120 137 L120 155 L102 155 Z M102 158 L119 158 L118 176 L102 178 Z M102 181 L117 181 C116 192 110 200 102 204 Z',
+  abductors: 'M138 206 C146 210 148 222 146 240 C142 236 138 224 138 206 Z',
+  adductors: 'M101 226 L113 232 C113 258 111 280 108 292 C104 280 102 252 101 226 Z',
+  quadriceps: 'M104 212 C122 204 138 210 143 230 C143 262 138 288 130 298 C118 300 112 292 112 262 C112 244 108 230 104 212 Z',
+  calves: 'M120 316 C132 314 138 330 136 352 C134 372 128 384 124 388 C118 380 116 340 120 316 Z'
+};
+const BODY_B = {
+  traps: 'M100 50 L112 55 C128 62 140 68 142 74 C132 90 116 100 100 114 Z',
+  shoulders: 'M142 72 C154 68 164 76 166 90 C166 102 160 106 154 104 C146 98 142 86 142 72 Z',
+  lats: 'M144 98 C152 106 150 128 144 148 C140 162 134 170 126 174 C116 170 108 156 106 140 C122 136 136 122 144 98 Z',
+  'middle back': 'M101 108 C110 102 121 102 125 110 C123 124 113 132 101 134 Z',
+  'lower back': 'M101 140 C112 142 122 154 126 164 L124 188 C114 192 106 190 101 190 Z',
+  triceps: 'M156 104 C164 104 168 114 168 128 C167 140 162 146 158 146 C154 140 152 124 154 112 Z',
+  forearms: 'M158 150 C166 148 172 160 172 178 C171 194 168 204 164 206 C160 196 156 172 158 150 Z',
+  glutes: 'M101 194 C118 188 140 192 143 212 C143 230 128 238 114 234 C104 232 101 226 101 222 Z',
+  abductors: 'M138 196 C146 200 148 216 146 232 C140 230 138 214 138 196 Z',
+  hamstrings: 'M103 242 C122 240 140 240 143 254 C143 282 138 300 130 306 C118 308 108 298 105 272 Z',
+  calves: 'M118 318 C132 314 140 330 138 352 C136 372 130 386 124 390 C116 380 114 340 118 318 Z'
+};
+let bodyN = 0;
+function bodySvg(view, prim, sec) {
+  const M = view === 'front' ? BODY_F : BODY_B, id = 'gl' + (++bodyN);
+  const half = () => BODY_BASE.map(d => `<path d="${d}" fill="#1b1b1f" stroke="#34343a" stroke-width="1.2"/>`).join('') + Object.entries(M).map(([k, d]) =>
+    prim.includes(k) ? `<path d="${d}" fill="#ff3030" stroke="#ff7a7a" stroke-width="1" filter="url(#${id})"/>`
+      : sec.includes(k) ? `<path d="${d}" fill="#a42a2a" fill-opacity=".75" stroke="#d65a5a" stroke-width=".8"/>`
+        : `<path d="${d}" fill="#2a2a30" stroke="#3b3b42" stroke-width=".8"/>`).join('');
+  return `<svg viewBox="0 0 200 430" role="img" aria-label="${view === 'front' ? 'Vue de face' : 'Vue de dos'}"><defs><filter id="${id}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
+    + `<ellipse cx="100" cy="26" rx="15" ry="19" fill="#1b1b1f" stroke="#34343a" stroke-width="1.2"/><rect x="93" y="42" width="14" height="14" fill="#1b1b1f"/><g>${half()}</g><g transform="translate(200,0) scale(-1,1)">${half()}</g></svg>`;
+}
+const hasMap = e => !!(e && e.prim && e.prim.length);
+const muscleMap = e => !hasMap(e) ? '' : `<div class="bodymap">${bodySvg('front', e.prim, e.sec)}${bodySvg('back', e.prim, e.sec)}
+  <div class="leg"><span><i class="p"></i>${esc(e.prim.map(k => MU_FR[k] || k).join(' · '))}</span>${e.sec.length ? `<span><i class="s"></i>${esc(e.sec.map(k => MU_FR[k] || k).join(' · '))}</span>` : ''}</div></div>`;
 const exImgs = e => e && e.img ? [IMG_BASE + e.img + '/0.jpg', IMG_BASE + e.img + '/1.jpg'] : [];
 const thumb = e => e.img ? `<img class="thumb" src="${IMG_BASE}${e.img}/0.jpg" alt="" loading="lazy" decoding="async">` : '<span class="thumb ph"></span>';
-const eyeBtn = (e, cls) => e && e.img ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
+const eyeBtn = (e, cls) => e && (e.img || hasMap(e)) ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
 const finished = () => S.workouts.filter(w => w.endedAt).sort((a, b) => a.startedAt - b.startedAt);
 const newSet = () => ({ w: null, r: null, done: false, type: 'N' });
 
@@ -689,12 +730,13 @@ function closeSheet() { const s = $('#sheet'); s.classList.remove('open'); s.inn
 
 /* illustration (lightbox) */
 function exView(id) {
-  const e = ex(id); if (!e || !e.img) return; closeView();
+  const e = ex(id); if (!e || !(e.img || hasMap(e))) return; closeView();
   const d = document.createElement('div'); d.id = 'lightbox';
   d.innerHTML = `<div class="lb-bg" data-act="lbclose"></div><div class="lb-card"><button class="lb-x" data-act="lbclose" aria-label="Fermer">✕</button>
     <h3>${esc(e.name)}</h3><div class="lb-m">${esc(e.muscle)}</div>
-    <div class="lb-imgs">${exImgs(e).map(u => `<img src="${u}" alt="${esc(e.name)}">`).join('')}</div>
-    <small class="note">Illustration à titre d'exemple (base libre free-exercise-db). Le matériel de ta salle peut différer légèrement.</small></div>`;
+    ${exImgs(e).length ? `<div class="lb-imgs">${exImgs(e).map(u => `<img src="${u}" alt="${esc(e.name)}">`).join('')}</div>` : ''}
+    ${muscleMap(e)}
+    <small class="note">Photos à titre d'exemple (base libre free-exercise-db) : le matériel de ta salle peut différer légèrement. Muscles : principal en rouge vif, secondaires en rouge foncé.</small></div>`;
   document.body.appendChild(d);
 }
 function closeView() { const d = $('#lightbox'); if (d) d.remove(); }
@@ -764,6 +806,7 @@ function exDetail(id) {
   const maxW = Math.max(...h.map(x => Math.max(...x.sets.map(setW)))), bestE = Math.max(...h.map(x => x.best.e));
   sheet(`<h3>${esc(exName(id))}</h3>
     ${exImgs(ex(id)).length ? `<div class="lb-imgs">${exImgs(ex(id)).map(u => `<img src="${u}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${muscleMap(ex(id))}
     <div class="stats"><div class="stat"><b>${fmt(maxW)} kg</b><span>Charge max</span></div><div class="stat"><b>${bestE > 0 ? fmt(Math.round(bestE * 10) / 10) + ' kg' : '–'}</b><span>Meilleur e1RM</span></div></div>
     <div class="lbl sec" style="margin-top:16px">Progression (${unit})</div>${lineChart(pts, unit)}
     <small class="note">e1RM = charge maximale estimée sur 1 répétition (formule d'Epley). Séries de travail uniquement.</small>
