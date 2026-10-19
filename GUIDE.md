@@ -71,3 +71,4 @@ Modifie les fichiers sur GitHub (ou remplace-les). Dans `sw.js`, change `lift-cl
 - « La connexion par email n'est pas activée » → étape 1.2.
 - Écran « Configuration à faire » → `firebase-config.js` contient encore des « REMPLACE… ».
 - Le site ne change pas après une mise à jour → ferme complètement l'app et rouvre-la (ou change le numéro de version dans `sw.js`).
+
