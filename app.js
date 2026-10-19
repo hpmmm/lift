@@ -28,30 +28,100 @@ const standalone = () => navigator.standalone === true || (window.matchMedia && 
 
 /* ---------- données de base ---------- */
 const MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Biceps', 'Triceps', 'Quadriceps', 'Ischios', 'Fessiers', 'Mollets', 'Abdos'];
-const SEED = {
-  Pectoraux: [
-    { name: 'Développé couché (barre)', img: 'https://upload.wikimedia.org/wikipedia/commons/8/82/Bench-press-1.svg' },
-    { name: 'Développé couché (haltères)' },
-    { name: 'Développé incliné (barre)' },
-    { name: 'Développé incliné (haltères)' },
-    { name: 'Développé couché (machine)' },
-    { name: 'Développé incliné (machine)' },
-    { name: 'Pec deck (butterfly)' },
-    { name: 'Écartés poulie vis-à-vis' },
-    { name: 'Dips (pectoraux)' },
-    { name: 'Pompes' },
-    { name: 'Développé couché (Smith machine)', img: 'https://upload.wikimedia.org/wikipedia/commons/8/82/Bench-press-1.svg' },
-    { name: 'Développé incliné (Smith machine)' }],
-  Dos: ['Tractions', 'Tirage vertical (poulie haute)', 'Tirage horizontal (poulie basse)', 'Rowing barre', 'Rowing haltère (unilatéral)', 'Rowing machine', 'Pull-over poulie', 'Soulevé de terre', 'Shrugs'],
-  'Épaules': ['Développé militaire (barre)', 'Développé épaules (haltères)', 'Développé épaules (machine)', 'Élévations latérales (haltères)', 'Élévations latérales (poulie)', 'Élévations latérales (machine)', 'Oiseau (haltères)', 'Reverse pec deck', 'Face pull' 'Développé épaules (Smith machine)'],
-  Biceps: ['Curl barre', 'Curl haltères', 'Curl incliné', 'Curl marteau', 'Curl pupitre (machine)', 'Curl poulie basse'],
-  Triceps: ['Extension poulie haute (corde)', 'Extension poulie haute (barre)', 'Barre au front', 'Dips (triceps)', 'Extension nuque (haltère)', 'Extension triceps (machine)', 'Kickback poulie'],
-  Quadriceps: ['Squat (barre)', 'Squat (Smith)', 'Presse à cuisses', 'Leg extension', 'Hack squat', 'Fentes marchées', 'Squat bulgare'],
-  Ischios: ['Leg curl assis', 'Leg curl allongé', 'Soulevé de terre jambes tendues', 'Good morning'],
-  Fessiers: ['Hip thrust', 'Hip thrust (machine)', 'Abduction (machine)', 'Kickback poulie (fessiers)'],
-  Mollets: ['Mollets debout (machine)', 'Mollets assis (machine)', 'Mollets à la presse'],
-  Abdos: ['Crunch poulie', 'Crunch (machine)', 'Relevé de jambes', 'Roue abdominale']
-};
+// Catalogue des exercices pré-chargés : [identifiant, nom, groupe musculaire, image].
+// ⚠️ Chaque identifiant est DÉFINITIF (l'historique des utilisateurs y fait référence) : ne jamais renuméroter,
+// réordonner, supprimer ni réutiliser un identifiant. Pour ajouter un exercice : AJOUTER une ligne À LA FIN avec le
+// prochain identifiant libre (x87, x88…). Image = identifiant de l'exercice dans la base libre « free-exercise-db »
+// (domaine public), ou null s'il n'y en a pas de fiable.
+const IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const CATALOG = [
+  ['x1', 'Développé couché (barre)', 'Pectoraux', 'Barbell_Bench_Press_-_Medium_Grip'],
+  ['x2', 'Développé couché (haltères)', 'Pectoraux', 'Dumbbell_Bench_Press'],
+  ['x3', 'Développé incliné (barre)', 'Pectoraux', 'Barbell_Incline_Bench_Press_-_Medium_Grip'],
+  ['x4', 'Développé incliné (haltères)', 'Pectoraux', 'Incline_Dumbbell_Press'],
+  ['x5', 'Développé couché (machine)', 'Pectoraux', 'Machine_Bench_Press'],
+  ['x6', 'Développé incliné (machine)', 'Pectoraux', 'Leverage_Incline_Chest_Press'],
+  ['x7', 'Pec deck (butterfly)', 'Pectoraux', 'Butterfly'],
+  ['x8', 'Écartés poulie vis-à-vis', 'Pectoraux', 'Cable_Crossover'],
+  ['x9', 'Dips (pectoraux)', 'Pectoraux', 'Dips_-_Chest_Version'],
+  ['x10', 'Pompes', 'Pectoraux', 'Pushups'],
+  ['x11', 'Tractions', 'Dos', 'Pullups'],
+  ['x12', 'Tirage vertical (poulie haute)', 'Dos', 'Wide-Grip_Lat_Pulldown'],
+  ['x13', 'Tirage horizontal (poulie basse)', 'Dos', 'Seated_Cable_Rows'],
+  ['x14', 'Rowing barre', 'Dos', 'Bent_Over_Barbell_Row'],
+  ['x15', 'Rowing haltère (unilatéral)', 'Dos', 'One-Arm_Dumbbell_Row'],
+  ['x16', 'Rowing machine', 'Dos', 'Leverage_High_Row'],
+  ['x17', 'Pull-over poulie', 'Dos', 'Straight-Arm_Pulldown'],
+  ['x18', 'Soulevé de terre', 'Dos', 'Barbell_Deadlift'],
+  ['x19', 'Shrugs', 'Dos', 'Barbell_Shrug'],
+  ['x20', 'Développé militaire (barre)', 'Épaules', 'Standing_Military_Press'],
+  ['x21', 'Développé épaules (haltères)', 'Épaules', 'Dumbbell_Shoulder_Press'],
+  ['x22', 'Développé épaules (machine)', 'Épaules', 'Machine_Shoulder_Military_Press'],
+  ['x23', 'Élévations latérales (haltères)', 'Épaules', 'Side_Lateral_Raise'],
+  ['x24', 'Élévations latérales (poulie)', 'Épaules', 'Standing_Low-Pulley_Deltoid_Raise'],
+  ['x25', 'Élévations latérales (machine)', 'Épaules', null],
+  ['x26', 'Oiseau (haltères)', 'Épaules', 'Reverse_Flyes'],
+  ['x27', 'Reverse pec deck', 'Épaules', 'Reverse_Machine_Flyes'],
+  ['x28', 'Face pull', 'Épaules', 'Face_Pull'],
+  ['x29', 'Curl barre', 'Biceps', 'Barbell_Curl'],
+  ['x30', 'Curl haltères', 'Biceps', 'Dumbbell_Bicep_Curl'],
+  ['x31', 'Curl incliné', 'Biceps', 'Incline_Dumbbell_Curl'],
+  ['x32', 'Curl marteau', 'Biceps', 'Hammer_Curls'],
+  ['x33', 'Curl pupitre (machine)', 'Biceps', 'Machine_Preacher_Curls'],
+  ['x34', 'Curl poulie basse', 'Biceps', 'Standing_Biceps_Cable_Curl'],
+  ['x35', 'Extension poulie haute (corde)', 'Triceps', 'Triceps_Pushdown_-_Rope_Attachment'],
+  ['x36', 'Extension poulie haute (barre)', 'Triceps', 'Triceps_Pushdown'],
+  ['x37', 'Barre au front', 'Triceps', 'EZ-Bar_Skullcrusher'],
+  ['x38', 'Dips (triceps)', 'Triceps', 'Dips_-_Triceps_Version'],
+  ['x39', 'Extension nuque (haltère)', 'Triceps', 'Standing_Dumbbell_Triceps_Extension'],
+  ['x40', 'Extension triceps (machine)', 'Triceps', 'Machine_Triceps_Extension'],
+  ['x41', 'Kickback poulie', 'Triceps', null],
+  ['x42', 'Squat (barre)', 'Quadriceps', 'Barbell_Full_Squat'],
+  ['x43', 'Squat (Smith)', 'Quadriceps', 'Smith_Machine_Squat'],
+  ['x44', 'Presse à cuisses', 'Quadriceps', 'Leg_Press'],
+  ['x45', 'Leg extension', 'Quadriceps', 'Leg_Extensions'],
+  ['x46', 'Hack squat', 'Quadriceps', 'Hack_Squat'],
+  ['x47', 'Fentes marchées', 'Quadriceps', 'Bodyweight_Walking_Lunge'],
+  ['x48', 'Squat bulgare', 'Quadriceps', null],
+  ['x49', 'Leg curl assis', 'Ischios', 'Seated_Leg_Curl'],
+  ['x50', 'Leg curl allongé', 'Ischios', 'Lying_Leg_Curls'],
+  ['x51', 'Soulevé de terre jambes tendues', 'Ischios', 'Stiff-Legged_Barbell_Deadlift'],
+  ['x52', 'Good morning', 'Ischios', 'Good_Morning'],
+  ['x53', 'Hip thrust', 'Fessiers', 'Barbell_Hip_Thrust'],
+  ['x54', 'Hip thrust (machine)', 'Fessiers', null],
+  ['x55', 'Abduction (machine)', 'Fessiers', 'Thigh_Abductor'],
+  ['x56', 'Kickback poulie (fessiers)', 'Fessiers', 'One-Legged_Cable_Kickback'],
+  ['x57', 'Mollets debout (machine)', 'Mollets', 'Standing_Calf_Raises'],
+  ['x58', 'Mollets assis (machine)', 'Mollets', 'Seated_Calf_Raise'],
+  ['x59', 'Mollets à la presse', 'Mollets', 'Calf_Press_On_The_Leg_Press_Machine'],
+  ['x60', 'Crunch poulie', 'Abdos', 'Cable_Crunch'],
+  ['x61', 'Crunch (machine)', 'Abdos', 'Ab_Crunch_Machine'],
+  ['x62', 'Relevé de jambes', 'Abdos', 'Hanging_Leg_Raise'],
+  ['x63', 'Roue abdominale', 'Abdos', 'Ab_Roller'],
+  ['x64', 'Développé couché (Smith)', 'Pectoraux', 'Smith_Machine_Bench_Press'],
+  ['x65', 'Développé incliné (Smith)', 'Pectoraux', 'Smith_Machine_Incline_Bench_Press'],
+  ['x66', 'Développé décliné (Smith)', 'Pectoraux', 'Smith_Machine_Decline_Press'],
+  ['x67', 'Développé couché prise serrée (Smith)', 'Triceps', 'Smith_Machine_Close-Grip_Bench_Press'],
+  ['x68', 'Rowing penché (Smith)', 'Dos', 'Smith_Machine_Bent_Over_Row'],
+  ['x69', 'Développé épaules (Smith)', 'Épaules', 'Smith_Machine_Overhead_Shoulder_Press'],
+  ['x70', 'Tirage menton (Smith)', 'Épaules', 'Smith_Machine_Upright_Row'],
+  ['x71', 'Split squat (Smith)', 'Quadriceps', 'Smith_Single-Leg_Split_Squat'],
+  ['x72', 'Soulevé de terre jambes tendues (Smith)', 'Ischios', 'Smith_Machine_Stiff-Legged_Deadlift'],
+  ['x73', 'Mollets debout (Smith)', 'Mollets', 'Smith_Machine_Calf_Raise'],
+  ['x74', 'Shrugs dans le dos (Smith)', 'Dos', 'Smith_Machine_Behind_the_Back_Shrug'],
+  ['x75', 'Hip thrust (Smith)', 'Fessiers', null],
+  ['x76', 'Développé décliné (barre)', 'Pectoraux', 'Decline_Barbell_Bench_Press'],
+  ['x77', 'Écartés couché (haltères)', 'Pectoraux', 'Dumbbell_Flyes'],
+  ['x78', 'Développé couché prise serrée (barre)', 'Triceps', 'Close-Grip_Barbell_Bench_Press'],
+  ['x79', 'Tirage vertical prise serrée', 'Dos', 'Close-Grip_Front_Lat_Pulldown'],
+  ['x80', 'Rowing T-bar', 'Dos', 'T-Bar_Row_with_Handle'],
+  ['x81', 'Extension lombaires (banc à 45°)', 'Dos', 'Hyperextensions_Back_Extensions'],
+  ['x82', 'Arnold press', 'Épaules', 'Arnold_Dumbbell_Press'],
+  ['x83', 'Élévations frontales (haltères)', 'Épaules', 'Front_Dumbbell_Raise'],
+  ['x84', 'Curl concentré', 'Biceps', 'Concentration_Curls'],
+  ['x85', 'Fentes (haltères)', 'Quadriceps', 'Dumbbell_Lunges'],
+  ['x86', 'Crunch au sol', 'Abdos', 'Crunches'],
+];
 const GOALS = {
   hypertrophie: { label: 'Prise de muscle', ia: 'prise de muscle (hypertrophie)' },
   force: { label: 'Force', ia: 'gain de force maximale' },
@@ -82,12 +152,14 @@ const S = {
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
 };
-const seedList = () => { let i = 0; const out = []; for (const [muscle, names] of Object.entries(SEED)) for (const name of names) out.push({ id: 'x' + (++i), name, muscle, custom: false }); return out; };
-const SEEDS = seedList();
+const SEEDS = CATALOG.map(([id, name, muscle, img]) => ({ id, name, muscle, img, custom: false }));
 const rebuildEx = () => { S.exercises = [...SEEDS, ...S.custom]; };
 rebuildEx();
 const ex = id => S.exercises.find(e => e.id === id);
 const exName = id => ex(id)?.name || 'Exercice supprimé';
+const exImgs = e => e && e.img ? [IMG_BASE + e.img + '/0.jpg', IMG_BASE + e.img + '/1.jpg'] : [];
+const thumb = e => e.img ? `<img class="thumb" src="${IMG_BASE}${e.img}/0.jpg" alt="" loading="lazy" decoding="async">` : '<span class="thumb ph"></span>';
+const eyeBtn = (e, cls) => e && e.img ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
 const finished = () => S.workouts.filter(w => w.endedAt).sort((a, b) => a.startedAt - b.startedAt);
 const newSet = () => ({ w: null, r: null, done: false, type: 'N' });
 
@@ -511,7 +583,7 @@ function entryHtml(e) {
       <input class="in" data-f="r" inputmode="numeric" autocomplete="off" value="${s.r ?? ''}" placeholder="${ph.r}" aria-label="Répétitions">
       <button class="chk" data-act="check" aria-label="Valider la série">✓</button></div>`;
   }).join('');
-  return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b><button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
+  return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b>${eyeBtn(ex(e.exId), 'x')}<button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
     <div class="sethead"><span>SÉRIE</span><span>PRÉC.</span><span>KG</span><span>REPS</span><span></span></div>${rows}
     <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button></div></section>`;
 }
@@ -591,7 +663,24 @@ function sheet(html) {
   const s = $('#sheet'); s.innerHTML = `<div class="backdrop" data-act="closesheet"></div><div class="panel"><div class="grab"></div>${html}</div>`;
   s.classList.add('open'); document.body.classList.add('lock');
 }
-function closeSheet() { const s = $('#sheet'); s.classList.remove('open'); s.innerHTML = ''; document.body.classList.remove('lock'); picker = null; }
+function closeSheet() { const s = $('#sheet'); s.classList.remove('open'); s.innerHTML = ''; document.body.classList.remove('lock'); picker = null; closeView(); }
+
+/* illustration (lightbox) */
+function exView(id) {
+  const e = ex(id); if (!e || !e.img) return; closeView();
+  const d = document.createElement('div'); d.id = 'lightbox';
+  d.innerHTML = `<div class="lb-bg" data-act="lbclose"></div><div class="lb-card"><button class="lb-x" data-act="lbclose" aria-label="Fermer">✕</button>
+    <h3>${esc(e.name)}</h3><div class="lb-m">${esc(e.muscle)}</div>
+    <div class="lb-imgs">${exImgs(e).map(u => `<img src="${u}" alt="${esc(e.name)}">`).join('')}</div>
+    <small class="note">Illustration à titre d'exemple (base libre free-exercise-db). Le matériel de ta salle peut différer légèrement.</small></div>`;
+  document.body.appendChild(d);
+}
+function closeView() { const d = $('#lightbox'); if (d) d.remove(); }
+document.addEventListener('error', ev => {
+  const i = ev.target; if (!i || i.tagName !== 'IMG') return;
+  if (i.classList.contains('thumb')) i.style.visibility = 'hidden';
+  else { const m = document.createElement('p'); m.className = 'empty'; m.textContent = 'Image indisponible (connexion ?)'; i.replaceWith(m); }
+}, true);
 
 /* sélecteur d'exercices */
 let picker = null;
@@ -599,9 +688,9 @@ function openPicker(cb) { picker = { sel: new Set(), q: '', mu: '', cb, creating
 function pkList() {
   const used = {}; finished().forEach(w => w.entries.forEach(e => { used[e.exId] = (used[e.exId] || 0) + 1; }));
   const q = norm(picker.q);
-  const list = S.exercises.filter(e => (!picker.mu || e.muscle === picker.mu) && (!q || norm(e.name).includes(q)))
+  const list = S.exercises.filter(e => (!picker.mu || e.muscle === picker.mu) && (!q || q.split(/\s+/).every(tk => norm(e.name + ' ' + e.muscle + (/\(Smith\)/.test(e.name) ? ' smith machine barre guidee' : '')).includes(tk))))
     .sort((a, b) => (used[b.id] || 0) - (used[a.id] || 0) || a.name.localeCompare(b.name, 'fr'));
-  return list.map(e => `<button class="pk-item ${picker.sel.has(e.id) ? 'on' : ''}" data-act="pk-toggle" data-id="${e.id}"><span class="tick"></span><span>${esc(e.name)}</span><small>${esc(e.muscle)}</small></button>`).join('')
+  return list.map(e => `<div class="pk-row"><button class="pk-item ${picker.sel.has(e.id) ? 'on' : ''}" data-act="pk-toggle" data-id="${e.id}"><span class="tick"></span>${thumb(e)}<span class="pk-n">${esc(e.name)}</span><small>${esc(e.muscle)}</small></button>${eyeBtn(e, 'pk-eye')}</div>`).join('')
     || '<p class="empty">Aucun résultat. Crée l’exercice avec le bouton ci-dessous.</p>';
 }
 function drawPicker() {
@@ -652,6 +741,7 @@ function exDetail(id) {
   const pts = h.slice(-20).map(x => ({ t: x.t, v: Math.round(metric(x.best) * 10) / 10 }));
   const maxW = Math.max(...h.map(x => Math.max(...x.sets.map(setW)))), bestE = Math.max(...h.map(x => x.best.e));
   sheet(`<h3>${esc(exName(id))}</h3>
+    ${exImgs(ex(id)).length ? `<div class="lb-imgs">${exImgs(ex(id)).map(u => `<img src="${u}" alt="" loading="lazy">`).join('')}</div>` : ''}
     <div class="stats"><div class="stat"><b>${fmt(maxW)} kg</b><span>Charge max</span></div><div class="stat"><b>${bestE > 0 ? fmt(Math.round(bestE * 10) / 10) + ' kg' : '–'}</b><span>Meilleur e1RM</span></div></div>
     <div class="lbl sec" style="margin-top:16px">Progression (${unit})</div>${lineChart(pts, unit)}
     <small class="note">e1RM = charge maximale estimée sur 1 répétition (formule d'Epley). Séries de travail uniquement.</small>
@@ -789,6 +879,8 @@ document.addEventListener('click', async ev => {
     case 'review': runReview(id); break;
     case 'saveroutine': saveRoutine(id); break;
     case 'exdetail': exDetail(id); break;
+    case 'exview': exView(id); break;
+    case 'lbclose': closeView(); break;
     case 'pk-toggle': picker.sel.has(id) ? picker.sel.delete(id) : picker.sel.add(id); t.classList.toggle('on'); { const b = $('[data-act="pk-ok"]'); if (b) b.textContent = `Ajouter (${picker.sel.size})`; } break;
     case 'pk-mu': picker.mu = t.dataset.m; drawPicker(); break;
     case 'pk-new': picker.creating = true; if (!picker.mu) picker.mu = MUSCLES[0]; drawPicker(); break;

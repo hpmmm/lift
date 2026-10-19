@@ -1,4 +1,4 @@
-const CACHE = 'lift-cloud-v1';
+const CACHE = 'lift-cloud-v3';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'backend.js', 'firebase-config.js', 'firebase.js', 'manifest.webmanifest',
   'icon-180.png', 'icon-192.png', 'icon-512.png'
