@@ -44,3 +44,35 @@ export async function saveMany(uid, col, objs) {
     await b.commit();
   }
 }
+
+/* ---------- amis (pseudos uniques, demandes, partage limité, boîte de réception) ---------- */
+export const pairId = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
+
+// Pseudo unique : le document usernames/{pseudo en minuscules} ne peut être créé que s'il n'existe pas (règles Firestore).
+export async function claimHandle(uid, lower, display, oldLower) {
+  const b = F.writeBatch(fs);
+  if (oldLower && oldLower !== lower) b.delete(F.doc(fs, 'usernames', oldLower));
+  b.set(F.doc(fs, 'usernames', lower), { uid, lower, pseudo: display });
+  await b.commit();
+}
+export async function searchHandles(prefix) {
+  const q = F.query(F.collection(fs, 'usernames'), F.where('lower', '>=', prefix), F.where('lower', '<', prefix + ''), F.limit(8));
+  const snap = await F.getDocs(q);
+  return snap.docs.map(d => d.data());
+}
+export function watchFriendships(uid, cb) {
+  return F.onSnapshot(F.query(F.collection(fs, 'friendships'), F.where('users', 'array-contains', uid)),
+    snap => cb(snap.docs.map(d => ({ ...d.data(), id: d.id })), { fromCache: snap.metadata.fromCache }),
+    err => cb(null, { error: err && err.code }));
+}
+export const requestFriend = (me, other, names) => {
+  const users = [me, other].sort();
+  return F.setDoc(F.doc(fs, 'friendships', pairId(me, other)), { users, from: me, status: 'pending', names, ts: Date.now() });
+};
+export const acceptFriend = (me, other) => F.updateDoc(F.doc(fs, 'friendships', pairId(me, other)), { status: 'accepted' });
+export const removeFriendship = (me, other) => F.deleteDoc(F.doc(fs, 'friendships', pairId(me, other)));
+export const saveShared = (uid, obj) => F.setDoc(F.doc(fs, 'shared', uid), clean(obj));
+export function watchShared(uid, cb) {
+  return F.onSnapshot(F.doc(fs, 'shared', uid), s => cb(s.exists() ? s.data() : null), () => cb(null, true));
+}
+export const sendInbox = (toUid, obj) => F.setDoc(F.doc(fs, 'users', toUid, 'inbox', obj.id), clean(obj));

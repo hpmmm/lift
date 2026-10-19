@@ -132,8 +132,8 @@ const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
 // Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '' };
-const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo'];
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false };
+const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
 const storeCfg = () => { try { localStorage.setItem('lift.cfg', JSON.stringify(cfg)); } catch (e) { } };
@@ -154,6 +154,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
   chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight', sub: '', pm: 'dur',
+  friends: [], shared: {}, sharedUnsubs: {}, inbox: [], friend: '', fr: { q: '', results: [], msg: '', busy: false },
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
 };
@@ -248,11 +249,14 @@ function startSession(user) {
     backend.watchSettings(user.uid, s => { applySettings(s); ready('s'); }),
     backend.watch(user.uid, 'chat', (list, m) => { if (list) applyChat(list); }),
     backend.watch(user.uid, 'facts', (list, m) => { if (list) applyFacts(list); }),
-    backend.watch(user.uid, 'body', (list, m) => { if (list) applyBody(list); })
+    backend.watch(user.uid, 'body', (list, m) => { if (list) applyBody(list); }),
+    backend.watchFriendships(user.uid, (list) => { if (list) applyFriends(list); }),
+    backend.watch(user.uid, 'inbox', (list) => { if (list) applyInbox(list); })
   ];
 }
 function endSession() {
   unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = [];
+  Object.values(S.sharedUnsubs).forEach(f => { try { f(); } catch (e) { } }); S.sharedUnsubs = {}; S.shared = {}; S.friends = []; S.inbox = []; S.friend = ''; S.fr = { q: '', results: [], msg: '', busy: false }; clearTimeout(pushTimer); lastPush = '';
   S.user = null; S.workouts = []; S.routines = []; S.custom = []; rebuildEx(); S.active = null; S.loading = false; S.syncErr = '';
   S.auth = { mode: 'login', err: '', info: '', busy: false, email: '' };
   // Rien du compte précédent ne doit rester visible ni être recopié dans le prochain compte.
@@ -274,7 +278,7 @@ function applyWorkouts(list) {
   S.active = merged.filter(w => !w.endedAt).sort((a, b) => b.startedAt - a.startedAt)[0] || null;
   if (S.active && !prev) wake();
   if (!S.active && prev) { rest = null; drawRest(); unwake(); }
-  if (changed || (prev && prev.id) !== (S.active && S.active.id)) renderSoft();
+  if (changed || (prev && prev.id) !== (S.active && S.active.id)) { renderSoft(); schedulePush(!!prev !== !!S.active); }
 }
 function applyRoutines(list) {
   list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
@@ -294,7 +298,7 @@ function applySettings(s) {
     if (!cfg.syncKey) { cfg.syncKey = true; ch = true; }
     if (s.apiKey && s.apiKey !== cfg.apiKey) { cfg.apiKey = s.apiKey; ch = true; }
   } else if (s.syncKey === false && cfg.syncKey) { cfg.syncKey = false; ch = true; }
-  if (ch) { storeCfg(); renderSoft(); }
+  if (ch) { storeCfg(); renderSoft(); schedulePush(); }
 }
 
 /* ---------- calculs ---------- */
@@ -548,6 +552,7 @@ const ICONS = {
   progress: '<svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg>',
   body: '<svg viewBox="0 0 24 24"><circle cx="12" cy="4.8" r="2.2"/><path d="M6.5 9.5 12 8l5.5 1.5M12 8v6M9 21l3-7 3 7"/></svg>',
   chat: '<svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M8 10h8M8 13h5"/></svg>',
+  friends: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.6 3.2-5.4 6-5.4s5.4 1.8 6 5.4"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.4c2.6.1 4.1 1.7 4.5 4.6"/></svg>',
   dumbbell: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>',
   profile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>',
   coach: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>'
@@ -694,6 +699,7 @@ function viewProgress() {
 function viewSettings() {
   return `${installHint()}
   <div class="lbl" style="margin-bottom:10px">Compte</div>
+  <section class="card"><b>Amis et partage</b><div class="muted" style="font-size:13px;margin:4px 0 10px">Pseudo : ${cfg.handle ? '<b>@' + esc(cfg.handle) + '</b>' : 'non choisi'}</div><div class="row"><button class="btn" data-act="handle-open">${cfg.handle ? 'Changer de pseudo' : 'Choisir un pseudo'}</button><button class="btn" data-act="share-open">Ce que je partage</button></div></section>
   <section class="card"><div class="row" style="align-items:center"><div style="min-width:0"><b>${esc(cfg.pseudo || 'Mon compte')}</b><div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis">${esc(S.user ? S.user.email : '')}</div>
     <div style="font:600 11px var(--mono);letter-spacing:.14em;margin-top:6px" class="${navigator.onLine && !S.syncErr ? 'up' : 'down'}">${navigator.onLine && !S.syncErr ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</div></div>
     <button class="btn sm" style="flex:none;width:auto" data-act="logout">Se déconnecter</button></div></section>
@@ -789,6 +795,7 @@ function workoutDetail(w, fresh) {
     <div class="lbl sec" style="margin-top:16px">Détail</div>
     ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(exName(e.exId))}</b><div class="chips2">${e.sets.filter(s => s.done).map(s => `<span class="sc ${s.type === 'W' ? 'w' : ''}">${s.type === 'W' ? 'É ' : ''}${fmt(setW(s))}×${s.r}</span>`).join('')}</div>${e.note && e.note.trim() ? `<div class="note-txt">💬 ${esc(e.note.trim())}</div>` : ''}</div>`).join('')}
     <div class="row" style="margin-top:14px"><button class="btn" data-act="saveroutine" data-id="${w.id}">Enregistrer en routine</button>
+    ${friendsAccepted().length ? `<button class="btn" data-act="send-open" data-id="${w.id}">Envoyer à un ami</button>` : ''}
     ${fresh ? '<button class="btn primary" data-act="closesheet">Fermer</button>' : '<button class="btn" data-act="delw" data-id="' + w.id + '" style="color:#ff8a4c">Supprimer</button>'}</div>`);
   if (fresh && cfg.apiKey && !w.review) runReview(w.id);
 }
@@ -831,7 +838,7 @@ function makeEntries(exIds) {
 async function startWorkout(exIds = [], name) {
   const w = { id: uid(), startedAt: Date.now(), endedAt: null, name: name || defaultName(), entries: [], review: null };
   S.workouts.push(w); S.active = w; w.entries = makeEntries(exIds);
-  put('workouts', w); S.tab = 'train'; wake(); render();
+  put('workouts', w); S.tab = 'train'; wake(); render(); schedulePush(true);
 }
 async function finishWorkout() {
   const w = S.active;
@@ -844,12 +851,12 @@ async function finishWorkout() {
   if (pending && !confirm(`${pending} série(s) non validée(s) seront ignorées. Terminer la séance ?`)) return;
   clearTimeout(saveTimer); saveTimer = null;
   w.entries = kept; w.endedAt = Date.now(); put('workouts', w);
-  S.active = null; rest = null; drawRest(); unwake(); render(); workoutDetail(w, true);
+  S.active = null; rest = null; drawRest(); unwake(); render(); workoutDetail(w, true); schedulePush(true);
 }
 async function discardWorkout() {
   const w = S.active; clearTimeout(saveTimer); saveTimer = null;
   S.workouts = S.workouts.filter(x => x.id !== w.id); del('workouts', w.id);
-  S.active = null; rest = null; drawRest(); unwake(); render();
+  S.active = null; rest = null; drawRest(); unwake(); render(); schedulePush(true);
 }
 function toggleCheck(row) {
   const e = S.active.entries.find(x => x.id === row.dataset.e), i = +row.dataset.i, s = e.sets[i];
@@ -927,6 +934,234 @@ async function importData(file) {
   } catch (e) { alert(e.message === 'nouser' ? 'Connecte-toi d’abord.' : 'Import impossible : fichier invalide ou erreur réseau.'); }
 }
 
+/* ---------- amis : pseudo unique, demandes, partage limité, séances reçues ---------- */
+const HANDLE_RE = /^[A-Za-z0-9_.-]{3,20}$/;
+const meUid = () => S.user && S.user.uid;
+const otherUid = f => f.users.find(u => u !== meUid());
+const friendsAccepted = () => S.friends.filter(f => f.status === 'accepted');
+const friendName = (uid, f) => (S.shared[uid] && S.shared[uid].pseudo) || (f && f.names && f.names[uid]) || 'Ami';
+const incomingReq = () => S.friends.filter(f => f.status === 'pending' && f.from !== meUid());
+const outgoingReq = () => S.friends.filter(f => f.status === 'pending' && f.from === meUid());
+const friendBadge = () => incomingReq().length + S.inbox.length;
+
+function syncSharedWatchers() {
+  const want = new Set(friendsAccepted().map(otherUid));
+  for (const uid of Object.keys(S.sharedUnsubs)) if (!want.has(uid)) { try { S.sharedUnsubs[uid](); } catch (e) { } delete S.sharedUnsubs[uid]; delete S.shared[uid]; }
+  for (const uid of want) if (!S.sharedUnsubs[uid]) S.sharedUnsubs[uid] = backend.watchShared(uid, d => { if (d) S.shared[uid] = d; else delete S.shared[uid]; renderSoft(); });
+}
+function applyFriends(list) {
+  list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  if (JSON.stringify(list) === JSON.stringify(S.friends)) return;
+  S.friends = list; syncSharedWatchers(); renderSoft();
+}
+function applyInbox(list) {
+  list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  if (JSON.stringify(list) === JSON.stringify(S.inbox)) return;
+  S.inbox = list; renderSoft();
+}
+
+/* partage : copie réduite de mes données, lisible uniquement par mes amis acceptés (selon mes choix) */
+function buildShared() {
+  const fw = finished(), o = {
+    uid: S.user.uid, pseudo: cfg.pseudo || cfg.handle, handle: cfg.handle, updatedAt: Date.now(),
+    flags: { act: !!cfg.shAct, rec: !!cfg.shRec, rcd: !!cfg.shRcd, live: !!cfg.shLive, w: !!cfg.shW }
+  };
+  if (cfg.shAct) {
+    const ms = mondayOf(Date.now());
+    o.act = {
+      sessions: fw.length, sets: fw.reduce((t, w) => t + wSets(w), 0), volume: Math.round(fw.reduce((t, w) => t + wVol(w), 0)),
+      weeks: Array.from({ length: 12 }, (_, i) => {
+        const a = addDays(ms, -7 * (11 - i)), ws = fw.filter(w => w.startedAt >= a && w.startedAt < addDays(a, 7));
+        return { a, c: ws.length, sets: ws.reduce((t, w) => t + wSets(w), 0), dur: Math.round(ws.reduce((t, w) => t + (w.endedAt - w.startedAt) / 60000, 0)), vol: Math.round(ws.reduce((t, w) => t + wVol(w), 0)) };
+      })
+    };
+  }
+  if (cfg.shRec) {
+    o.recent = fw.slice(-10).reverse().map(w => ({
+      id: w.id, name: w.name, ts: w.startedAt, dur: Math.round((w.endedAt - w.startedAt) / 60000), sets: wSets(w),
+      entries: w.entries.map(e => {
+        const ws = workSets(e), x = { exId: e.exId, nm: exName(e.exId), mu: ex(e.exId)?.muscle || '', n: ws.length };
+        if (cfg.shW) x.s = ws.map(s => [setW(s), s.r]);
+        return x;
+      }).filter(x => x.n)
+    }));
+  }
+  if (cfg.shRcd) {
+    const ids = [...new Set(fw.flatMap(w => w.entries.map(e => e.exId)))];
+    o.records = ids.map(id => {
+      const h = exHistory(id); if (!h.length) return null;
+      const b = h.reduce((a, x) => x.best.e > a.best.e ? x : a, h[0]);
+      return { exId: id, nm: exName(id), mu: ex(id)?.muscle || '', w: b.best.w, r: b.best.r, ts: b.t };
+    }).filter(Boolean).sort((a, b) => b.ts - a.ts).slice(0, 30);
+  }
+  if (cfg.shLive && S.active) o.live = { since: S.active.startedAt, name: S.active.name };
+  return o;
+}
+let pushTimer = null, lastPush = '';
+function schedulePush(fast) {
+  if (!S.user || !cfg.handle) return;
+  clearTimeout(pushTimer); pushTimer = setTimeout(doPush, fast ? 300 : 4000);
+}
+async function doPush() {
+  if (!S.user || !cfg.handle) return;
+  const o = buildShared(), sig = JSON.stringify({ ...o, updatedAt: 0 });
+  if (sig === lastPush) return;
+  lastPush = sig;
+  try { await backend.saveShared(S.user.uid, o); } catch (e) { lastPush = ''; }
+}
+
+/* pseudo */
+function openHandleSheet() {
+  sheet(`<h3>${cfg.handle ? 'Changer de pseudo' : 'Choisis ton pseudo'}</h3>
+    <p class="muted" style="margin:-6px 0 12px;font-size:14px">C'est le nom sous lequel tes amis te trouvent (3 à 20 caractères : lettres, chiffres, point, tiret, tiret bas). Il est unique : deux personnes ne peuvent pas avoir le même.</p>
+    <input id="hd-in" class="field" maxlength="20" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="ex. evan.b" value="${esc(cfg.pseudo || '')}">
+    <div id="hd-msg" class="err"></div>
+    <div class="pk-foot"><button class="btn ghost" data-act="closesheet">Annuler</button><button class="btn primary" data-act="handle-save">Réserver</button></div>`);
+}
+async function claimHandleAction() {
+  const v = ($('#hd-in').value || '').trim(), msg = $('#hd-msg');
+  if (!HANDLE_RE.test(v)) { msg.textContent = 'Pseudo invalide : 3 à 20 caractères (lettres, chiffres, . - _).'; return; }
+  if (v.toLowerCase() === cfg.handle) { cfg.pseudo = v; saveCfg(); schedulePush(true); closeSheet(); render(); return; }
+  if (!navigator.onLine) { msg.textContent = 'Connexion requise.'; return; }
+  try {
+    await backend.claimHandle(S.user.uid, v.toLowerCase(), v, cfg.handle);
+    cfg.handle = v.toLowerCase(); cfg.pseudo = v; saveCfg(); schedulePush(true); closeSheet(); render();
+  } catch (e) { msg.textContent = 'Ce pseudo est déjà pris (ou la connexion a échoué). Essaie-en un autre.'; }
+}
+
+/* réglages de partage */
+function openShareSettings() {
+  if (!cfg.shAsked) { cfg.shAsked = true; saveCfg(); }
+  const row = (k, t, d) => `<label class="shrow"><input type="checkbox" data-cfg="${k}" ${cfg[k] ? 'checked' : ''}><span><b>${t}</b><br><small class="note">${d}</small></span></label>`;
+  sheet(`<h3>Ce que je partage</h3>
+    <p class="muted" style="margin:-6px 0 10px;font-size:14px">Visible uniquement par tes amis acceptés. Tout est désactivé tant que tu ne coches pas. Tes commentaires, ta composition corporelle, le chat, la mémoire du coach et ta clé ne sont jamais partagés.</p>
+    ${row('shAct', 'Activité', 'Nombre de séances, de séries, volume total et graphique par semaine.')}
+    ${row('shRec', 'Dernières séances', 'Nom, date, durée et exercices de tes 10 dernières séances.')}
+    ${row('shW', '… avec mes charges', 'Ajoute les séries (kg × reps) aux dernières séances.')}
+    ${row('shRcd', 'Records', 'Ta meilleure série sur chaque exercice.')}
+    ${row('shLive', 'Statut ON AIR', 'Ils voient quand tu es en séance.')}
+    <div class="pk-foot"><button class="btn primary" data-act="closesheet" style="grid-column:1/-1">Terminé</button></div>`);
+}
+
+/* actions amis */
+async function searchFriends(q) {
+  const v = q.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+  if (v.length < 2) { S.fr.results = []; S.fr.msg = ''; drawFrResults(); return; }
+  S.fr.busy = true; S.fr.msg = ''; drawFrResults();
+  try { S.fr.results = (await backend.searchHandles(v)).filter(r => r.uid !== meUid()); S.fr.msg = S.fr.results.length ? '' : 'Aucun pseudo trouvé.'; }
+  catch (e) { S.fr.results = []; S.fr.msg = 'Recherche impossible (connexion ?).'; }
+  S.fr.busy = false; drawFrResults();
+}
+function drawFrResults() { const b = $('#fr-res'); if (b) b.innerHTML = frResultsHtml(); }
+function frResultsHtml() {
+  if (S.fr.busy) return '<div class="loading"><i></i>Recherche…</div>';
+  const rows = S.fr.results.map(r => {
+    const f = S.friends.find(x => x.users.includes(r.uid));
+    const act = !f ? `<button class="btn sm primary" data-act="fr-add" data-id="${r.uid}" data-p="${esc(r.pseudo)}">Ajouter</button>`
+      : f.status === 'accepted' ? '<span class="muted">Ami</span>' : f.from === meUid() ? '<span class="muted">Demande envoyée</span>' : `<button class="btn sm primary" data-act="fr-accept" data-id="${r.uid}">Accepter</button>`;
+    return `<div class="frow"><div class="avatar sm">${esc(r.pseudo.charAt(0).toUpperCase())}</div><b>${esc(r.pseudo)}</b>${act}</div>`;
+  }).join('');
+  return rows || (S.fr.msg ? `<p class="empty">${esc(S.fr.msg)}</p>` : '');
+}
+async function addFriend(uid, pseudo) {
+  const inc = S.friends.find(f => f.users.includes(uid) && f.status === 'pending' && f.from === uid);
+  try {
+    if (inc) await backend.acceptFriend(meUid(), uid); else await backend.requestFriend(meUid(), uid, { [meUid()]: cfg.pseudo || cfg.handle, [uid]: pseudo });
+    S.fr.results = []; S.fr.q = ''; render(); if (!cfg.shAsked) openShareSettings();
+  } catch (e) { alert('Impossible d’envoyer la demande (déjà en attente, ou connexion).'); }
+}
+
+/* pages */
+const avatar = (n, cls = '') => `<div class="avatar ${cls}">${esc((n || '?').charAt(0).toUpperCase())}</div>`;
+function viewFriends() {
+  if (!cfg.handle) return subPage('Amis', `<section class="card"><p class="muted" style="margin:0 0 12px">Pour trouver tes amis et être trouvé, choisis d'abord un pseudo unique.</p><button class="btn primary" data-act="handle-open">Choisir mon pseudo</button></section>`);
+  const inc = incomingReq(), out = outgoingReq(), fr = friendsAccepted();
+  return subPage('Amis', `<div class="muted" style="margin:-4px 0 10px;font-size:14px">Ton pseudo : <b>${esc(cfg.pseudo || cfg.handle)}</b> · <button class="linkbtn" data-act="handle-open">changer</button></div>
+    <section class="card"><input id="fr-q" class="field" placeholder="Rechercher un pseudo" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(S.fr.q)}" style="margin-bottom:6px"><div id="fr-res">${frResultsHtml()}</div></section>
+    ${inc.length ? `<div class="lbl sec">Demandes reçues</div>${inc.map(f => { const u = otherUid(f); return `<div class="card frow">${avatar(friendName(u, f), 'sm')}<b>${esc(friendName(u, f))}</b><button class="btn sm primary" data-act="fr-accept" data-id="${u}">Accepter</button><button class="btn sm" data-act="fr-remove" data-id="${u}" data-c="0">Refuser</button></div>`; }).join('')}` : ''}
+    ${S.inbox.length ? `<div class="lbl sec">Séances reçues (${S.inbox.length})</div>${S.inbox.map(m => `<button class="card bm" data-act="inbox-open" data-id="${m.id}"><b>${esc(m.name)}</b><span class="muted">de ${esc(m.fromPseudo || 'un ami')} · ${m.exercises.length} exercice${m.exercises.length > 1 ? 's' : ''} · ${fmtDate(m.ts)}</span></button>`).join('')}` : ''}
+    <div class="lbl sec">Mes amis (${fr.length})</div>
+    ${fr.map(f => { const u = otherUid(f), sh = S.shared[u], live = sh && sh.live; return `<button class="card frow" data-act="friend-open" data-id="${u}">${avatar(friendName(u, f), 'sm')}<span class="fn"><b>${esc(friendName(u, f))}</b>${live ? `<small class="onair">● ON AIR · ${esc(live.name || '')}</small>` : ''}</span><span class="muted">›</span></button>`; }).join('') || '<p class="empty">Aucun ami pour l’instant. Cherche un pseudo ci-dessus.</p>'}
+    ${out.length ? `<div class="lbl sec">Demandes envoyées</div>${out.map(f => { const u = otherUid(f); return `<div class="card frow">${avatar(friendName(u, f), 'sm')}<b>${esc(friendName(u, f))}</b><button class="btn sm" data-act="fr-remove" data-id="${u}" data-c="0">Annuler</button></div>`; }).join('')}` : ''}
+    <button class="btn" style="margin-top:14px" data-act="share-open">Ce que je partage</button>`);
+}
+function viewFriend() {
+  const uid = S.friend, f = S.friends.find(x => x.users.includes(uid) && x.status === 'accepted');
+  if (!f) { S.sub = 'friends'; return viewFriends(); }
+  const d = S.shared[uid], name = friendName(uid, f);
+  let body = '';
+  if (!d) body = '<p class="empty">Chargement…</p>';
+  else {
+    const fl = d.flags || {};
+    if (d.live) body += `<div class="card hint"><span class="onair">● ON AIR</span><span>${esc(d.live.name || 'Séance')} · commencée à ${new Date(d.live.since).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span></div>`;
+    if (!fl.act && !fl.rec && !fl.rcd) body += `<p class="empty">${esc(name)} n’a encore rien partagé.</p>`;
+    if (d.act) {
+      const vals = d.act.weeks.map(w => S.pm === 'vol' ? w.vol : S.pm === 'sets' ? w.sets : w.dur / 60), cur = vals[vals.length - 1], unit = S.pm === 'vol' ? 'kg' : S.pm === 'sets' ? 'séries' : 'h';
+      body += `<div class="stats pstats"><div class="stat"><b>${d.act.sessions}</b><span>Séances</span></div><div class="stat"><b>${d.act.sets.toLocaleString('fr-FR')}</b><span>Séries</span></div><div class="stat"><b>${d.act.volume >= 1000 ? fmt(Math.round(d.act.volume / 100) / 10) + ' t' : d.act.volume + ' kg'}</b><span>Volume</span></div></div>
+        <div class="lbl sec"><b style="color:var(--text);font-size:16px;letter-spacing:0;text-transform:none">${S.pm === 'dur' ? fmt(Math.round(cur * 10) / 10) : Math.round(cur).toLocaleString('fr-FR')} ${unit}</b> cette semaine</div>
+        <section class="card">${barChart(vals, d.act.weeks.map(w => fmtDate(w.a)))}<div class="chips" style="margin:6px 0 0">${[['dur', 'Durée'], ['vol', 'Volume'], ['sets', 'Séries']].map(([k, l]) => `<button class="chip ${S.pm === k ? 'on' : ''}" data-act="pmetric" data-k="${k}">${l}</button>`).join('')}</div></section>`;
+    }
+    if (d.recent) body += `<div class="lbl sec">Dernières séances</div>${d.recent.map(w => `<button class="card bm" data-act="fworkout" data-id="${w.id}"><b>${esc(w.name)}</b><span class="muted">${fmtDate(w.ts)} · ${w.dur} min · ${w.sets} séries · ${w.entries.length} exercice${w.entries.length > 1 ? 's' : ''}</span></button>`).join('') || '<p class="empty">Aucune séance.</p>'}`;
+    if (d.records) body += `<div class="lbl sec">Records</div>${d.records.map(r => `<div class="card prow"><div class="meta"><b>${esc(r.nm)}</b><small>${esc(r.mu)} · ${fmtDate(r.ts)}</small></div><div class="val">${fmt(r.w)} × ${r.r}</div></div>`).join('') || '<p class="empty">Aucun record.</p>'}`;
+  }
+  return subPage(esc(name), `<div class="phead">${avatar(name)}<div class="pinfo"><b>${esc(name)}</b><small class="muted" style="font-weight:500;letter-spacing:.06em">@${esc((d && d.handle) || '')}</small></div></div>${body}
+    <button class="btn" style="margin-top:16px" data-act="send-open" data-id="">Envoyer une de mes séances</button>
+    <button class="btn danger-text" data-act="fr-remove" data-id="${uid}" data-c="1">Retirer cet ami</button>`, 'friends', 'Amis');
+}
+function friendWorkoutSheet(uid, wid) {
+  const d = S.shared[uid], w = d && d.recent && d.recent.find(x => x.id === wid); if (!w) return;
+  sheet(`<h3>${esc(w.name)}</h3><div class="muted" style="margin:-8px 0 10px;font-size:14px">${esc(friendName(uid))} · ${fmtDateL(w.ts)} · ${w.dur} min</div>
+    ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(e.nm)}</b> <small class="muted">${esc(e.mu)}</small><div class="chips2">${e.s ? e.s.map(s => `<span class="sc">${fmt(s[0])}×${s[1]}</span>`).join('') : `<span class="sc">${e.n} série${e.n > 1 ? 's' : ''}</span>`}</div></div>`).join('')}
+    <div class="row" style="margin-top:14px"><button class="btn primary" data-act="fw-routine" data-u="${uid}" data-id="${wid}">Essayer : enregistrer en routine</button></div>`);
+}
+function ensureExercises(list) {
+  let added = false;
+  for (const e of list) if (!ex(e.exId) && e.nm) { const c = { id: e.exId, name: e.nm, muscle: MUSCLES.includes(e.mu) ? e.mu : 'Dos', custom: true }; S.custom.push(c); put('exercises', c); added = true; }
+  if (added) rebuildEx();
+}
+function saveRoutineFrom(name, entries) {
+  ensureExercises(entries);
+  const ids = entries.map(e => e.exId).filter(ex);
+  if (!ids.length) { alert('Aucun exercice reconnu.'); return false; }
+  const r = { id: uid(), name: String(name).slice(0, 40), exIds: ids, createdAt: Date.now() };
+  S.routines.push(r); put('routines', r); return true;
+}
+function inboxSheet(id) {
+  const m = S.inbox.find(x => x.id === id); if (!m) return;
+  sheet(`<h3>${esc(m.name)}</h3><div class="muted" style="margin:-8px 0 10px;font-size:14px">de ${esc(m.fromPseudo || 'un ami')} · ${fmtDateL(m.ts)}</div>
+    ${m.message ? `<div class="review" style="margin-top:0">💬 ${esc(m.message)}</div>` : ''}
+    ${m.exercises.map(e => `<div style="margin:10px 0"><b>${esc(e.nm || exName(e.exId))}</b> <small class="muted">${esc(e.mu || '')}</small><div class="chips2"><span class="sc">${e.n || '?'} série${e.n > 1 ? 's' : ''}${e.r ? ' × ' + esc(String(e.r)) : ''}${m.withWeights && e.w != null ? ' · ' + fmt(e.w) + ' kg' : ''}</span></div></div>`).join('')}
+    <div class="row" style="margin-top:14px"><button class="btn primary" data-act="inbox-save" data-id="${m.id}">Enregistrer en routine</button><button class="btn" data-act="inbox-del" data-id="${m.id}" style="color:#ff8a4c">Supprimer</button></div>`);
+}
+function openSendSheet(wid) {
+  const fr = friendsAccepted(), list = S.workouts.filter(w => w.endedAt).sort((a, b) => b.startedAt - a.startedAt).slice(0, 10);
+  if (!fr.length) { alert('Ajoute d’abord un ami (Profil → Amis).'); return; }
+  if (!list.length) { alert('Termine d’abord une séance.'); return; }
+  sheet(`<h3>Envoyer une séance</h3>
+    <label class="l" style="margin-top:0">À</label><select id="sd-to" class="field">${fr.map(f => { const u = otherUid(f); return `<option value="${u}" ${u === S.friend ? 'selected' : ''}>${esc(friendName(u, f))}</option>`; }).join('')}</select>
+    <label class="l">Séance</label><select id="sd-w" class="field">${list.map(w => `<option value="${w.id}" ${w.id === (wid || list[0].id) ? 'selected' : ''}>${esc(w.name)} · ${fmtDate(w.startedAt)}</option>`).join('')}</select>
+    <label class="l">Message (optionnel)</label><input id="sd-msg" class="field" maxlength="140" placeholder="Fais-la, elle est top !" autocomplete="off">
+    <label class="shrow"><input type="checkbox" id="sd-w2"><span><b>Inclure mes charges</b><br><small class="note">Par défaut seuls les exercices, séries et répétitions sont envoyés.</small></span></label>
+    <div id="sd-err" class="err"></div>
+    <div class="pk-foot"><button class="btn ghost" data-act="closesheet">Annuler</button><button class="btn primary" data-act="send-go">Envoyer</button></div>`);
+}
+async function sendSession() {
+  const to = $('#sd-to').value, w = S.workouts.find(x => x.id === $('#sd-w').value), withW = $('#sd-w2').checked, err = $('#sd-err');
+  if (!w || !to) return;
+  const ex2 = w.entries.map(e => {
+    const ws = workSets(e); if (!ws.length) return null; const b = best(ws);
+    const o = { exId: e.exId, nm: exName(e.exId), mu: ex(e.exId)?.muscle || '', n: ws.length, r: ws.map(s => s.r).sort((a, c) => a - c).filter((v, i, a) => i === 0 || i === a.length - 1).join('-') };
+    if (withW) o.w = b.w;
+    return o;
+  }).filter(Boolean);
+  if (!ex2.length) { err.textContent = 'Cette séance ne contient aucune série validée.'; return; }
+  const msg = { id: uid(), from: meUid(), fromPseudo: cfg.pseudo || cfg.handle, name: w.name.slice(0, 60), exercises: ex2, withWeights: withW, ts: Date.now() };
+  const m = ($('#sd-msg').value || '').trim().slice(0, 140); if (m) msg.message = m;
+  try { await backend.sendInbox(to, msg); closeSheet(); alert('Séance envoyée.'); }
+  catch (e) { err.textContent = 'Envoi impossible : cet ami doit t’avoir accepté, et tu dois être connecté.'; }
+}
+
+
 /* ---------- événements ---------- */
 document.addEventListener('click', async ev => {
   const t = ev.target.closest('[data-act]'); if (!t) return;
@@ -935,6 +1170,20 @@ document.addEventListener('click', async ev => {
   switch (a) {
     case 'tab': S.tab = t.dataset.t; S.sub = ''; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
     case 'sub': S.sub = t.dataset.s || ''; closeSheet(); render(); window.scrollTo(0, 0); break;
+    case 'handle-open': openHandleSheet(); break;
+    case 'handle-save': claimHandleAction(); break;
+    case 'share-open': openShareSettings(); break;
+    case 'fr-add': addFriend(id, t.dataset.p); break;
+    case 'fr-accept': try { await backend.acceptFriend(meUid(), id); if (!cfg.shAsked) openShareSettings(); } catch (e) { alert('Impossible d’accepter (connexion ?).'); } break;
+    case 'fr-remove': if (t.dataset.c !== '1' || confirm('Retirer cet ami ? Il ne verra plus tes données.')) { try { await backend.removeFriendship(meUid(), id); if (S.friend === id) { S.friend = ''; S.sub = 'friends'; } } catch (e) { alert('Action impossible (connexion ?).'); } } break;
+    case 'friend-open': S.friend = id; S.sub = 'friend'; render(); window.scrollTo(0, 0); break;
+    case 'fworkout': friendWorkoutSheet(S.friend, id); break;
+    case 'fw-routine': { const d = S.shared[t.dataset.u], w = d && d.recent && d.recent.find(x => x.id === id); if (w && saveRoutineFrom(w.name, w.entries)) { closeSheet(); alert('Routine enregistrée. Retrouve-la dans l’onglet Séance.'); } break; }
+    case 'send-open': openSendSheet(id || ''); break;
+    case 'send-go': sendSession(); break;
+    case 'inbox-open': inboxSheet(id); break;
+    case 'inbox-save': { const m = S.inbox.find(x => x.id === id); if (m && saveRoutineFrom(m.name, m.exercises)) { del('inbox', id); S.inbox = S.inbox.filter(x => x.id !== id); closeSheet(); render(); alert('Routine enregistrée.'); } break; }
+    case 'inbox-del': del('inbox', id); S.inbox = S.inbox.filter(x => x.id !== id); closeSheet(); render(); break;
     case 'pmetric': S.pm = t.dataset.k; render(); break;
     case 'exbrowse': openExBrowse(); break;
     case 'exopen': if (exHistory(id).length) exDetail(id); else exView(id); break;
@@ -1000,8 +1249,10 @@ document.addEventListener('click', async ev => {
   }
 });
 
+let frTimer = null;
 document.addEventListener('input', ev => {
   const t = ev.target;
+  if (t.id === 'fr-q') { S.fr.q = t.value; clearTimeout(frTimer); frTimer = setTimeout(() => searchFriends(S.fr.q), 350); return; }
   if (t.id === 'ex-q') { $('#ex-list').innerHTML = exBrowseList(t.value); return; }
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
   if (t.dataset.f === 'chat') { S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; return; }
@@ -1018,11 +1269,12 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => {
   const k = ev.target.dataset.cfg; if (!k) return;
   let v = ev.target.value;
-  if (k === 'syncKey') v = ev.target.checked;
+  if (k === 'syncKey' || ev.target.type === 'checkbox') v = ev.target.checked;
   if (k === 'rest') v = Math.min(600, Math.max(10, Math.round(num(v) || 90)));
   if (k === 'apiKey') v = v.trim();
   if (k === 'model') v = v.trim() || DEF.model;
   cfg[k] = v; saveCfg(); if (k === 'rest') ev.target.value = v;
+  if (/^sh[A-Z]/.test(k)) schedulePush(true);
 });
 $('#importfile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) importData(f); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wake(); tickRest(); } else flush(); });
@@ -1287,6 +1539,8 @@ function viewProfile() {
   if (S.sub === 'progress') return subPage('Statistiques', viewProgress());
   if (S.sub === 'body') return subPage('Corps', viewBody());
   if (S.sub === 'settings') return subPage('Réglages', viewSettings());
+  if (S.sub === 'friends') return viewFriends();
+  if (S.sub === 'friend') return viewFriend();
   const fw = finished(), name = cfg.pseudo || (S.user && S.user.email ? S.user.email.split('@')[0] : 'Moi'), ms = mondayOf(Date.now());
   const weeks = Array.from({ length: 12 }, (_, i) => addDays(ms, -7 * (11 - i)));
   const val = w => S.pm === 'vol' ? wVol(w) : S.pm === 'sets' ? wSets(w) : (w.endedAt - w.startedAt) / 3600000;
@@ -1306,10 +1560,11 @@ function viewProfile() {
       <button class="tile" data-act="sub" data-s="progress">${ICONS.progress}<span>Statistiques</span></button>
       <button class="tile" data-act="exbrowse">${ICONS.dumbbell}<span>Exercices</span></button>
       <button class="tile" data-act="sub" data-s="body">${ICONS.body}<span>Corps</span></button>
+      <button class="tile" data-act="sub" data-s="friends">${ICONS.friends}<span>Amis</span>${friendBadge() ? `<i class="badge">${friendBadge()}</i>` : ''}</button>
       <button class="tile" data-act="memo-open">${ICONS.chat}<span>Mémoire du coach</span></button>
     </div>`;
 }
-const subPage = (title, html) => `<div class="subhead"><button class="back" data-act="sub" data-s="">‹ Profil</button><b>${title}</b></div>${html}`;
+const subPage = (title, html, back = '', label = 'Profil') => `<div class="subhead"><button class="back" data-act="sub" data-s="${back}">‹ ${label}</button><b>${title}</b></div>${html}`;
 
 /* catalogue complet des exercices (avec illustrations) */
 function exBrowseList(q) {
