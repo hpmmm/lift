@@ -153,6 +153,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 /* ---------- état ---------- */
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
+  chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight',
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
 };
@@ -244,7 +245,10 @@ function startSession(user) {
     backend.watch(user.uid, 'workouts', (list, m) => { if (list) applyWorkouts(list); else syncError(m && m.error); ready('w'); }),
     backend.watch(user.uid, 'routines', (list, m) => { if (list) applyRoutines(list); else syncError(m && m.error); ready('r'); }),
     backend.watch(user.uid, 'exercises', (list, m) => { if (list) applyCustom(list); else syncError(m && m.error); ready('e'); }),
-    backend.watchSettings(user.uid, s => { applySettings(s); ready('s'); })
+    backend.watchSettings(user.uid, s => { applySettings(s); ready('s'); }),
+    backend.watch(user.uid, 'chat', (list, m) => { if (list) applyChat(list); }),
+    backend.watch(user.uid, 'facts', (list, m) => { if (list) applyFacts(list); }),
+    backend.watch(user.uid, 'body', (list, m) => { if (list) applyBody(list); })
   ];
 }
 function endSession() {
@@ -255,7 +259,8 @@ function endSession() {
   SYNCED.forEach(k => { cfg[k] = DEF[k]; });
   if (cfg.syncKey) { cfg.apiKey = ''; cfg.syncKey = false; } // clé synchronisée : retirée de cet appareil à la déconnexion (elle reste dans le compte)
   storeCfg();
-  try { localStorage.removeItem('lift.analysis'); } catch (e) { }
+  S.chat = []; S.facts = []; S.body = []; S.chatDraft = ''; S.chatImg = null; S.memoSug = []; S.chatBusy = false; S.chatErr = ''; S.bodyMsg = ''; S.bodyBusy = false;
+  try { localStorage.removeItem('lift.analysis'); localStorage.removeItem('lift.bodyAnalysis'); } catch (e) { }
   rest = null; drawRest(); unwake(); closeSheet(); render();
 }
 function applyWorkouts(list) {
@@ -358,17 +363,18 @@ function prsFor(w) {
 /* ---------- Gemini ---------- */
 const SYSTEM = `Tu es un coach de musculation expert (hypertrophie, force, périodisation). Tu t'appuies UNIQUEMENT sur les données fournies, sans rien inventer. Réponds en français, de façon concrète et directement exploitable, avec des charges chiffrées en kg (arrondies au pas de 1,25 ou 2,5 kg) et des plages de répétitions. Si les données sont insuffisantes pour conclure, dis-le franchement. Format : titres "## ", puces "- ", **gras** pour les chiffres clés. Pas d'introduction ni de conclusion superflue. Tu ne donnes pas de conseil médical ; en cas de douleur évoquée, recommande un avis professionnel.`;
 
-async function gemini(prompt) {
+const gemini = prompt => geminiCall({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+async function geminiCall({ contents, system = SYSTEM, json = false, temperature = 0.5, maxTokens = 4096 }) {
   if (!cfg.apiKey) throw new Error('NOKEY');
-  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 60000);
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 90000);
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`, {
       method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.apiKey },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 4096 }
+        systemInstruction: { parts: [{ text: system }] },
+        contents,
+        generationConfig: { temperature, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) }
       })
     });
     const j = await r.json().catch(() => ({}));
@@ -540,9 +546,11 @@ const ICONS = {
   train: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.4"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>',
   history: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
   progress: '<svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg>',
-  coach: '<svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M8 10h8M8 13h5"/></svg>'
+  body: '<svg viewBox="0 0 24 24"><circle cx="12" cy="4.8" r="2.2"/><path d="M6.5 9.5 12 8l5.5 1.5M12 8v6M9 21l3-7 3 7"/></svg>',
+  chat: '<svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M8 10h8M8 13h5"/></svg>',
+  coach: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>'
 };
-const TABS = [['train', 'Séance'], ['history', 'Historique'], ['progress', 'Progrès'], ['coach', 'Coach']];
+const TABS = [['train', 'Séance'], ['history', 'Historique'], ['progress', 'Progrès'], ['body', 'Corps'], ['chat', 'Chat'], ['coach', 'Coach']];
 
 function render() {
   const y = window.scrollY;
@@ -554,7 +562,7 @@ function render() {
   else {
     tabs = true;
     if (S.active) sign = '<div class="sign on"><i></i>ON AIR</div>';
-    body = syncBanner() + { train: viewTrain, history: viewHistory, progress: viewProgress, coach: viewCoach }[S.tab]();
+    body = syncBanner() + { train: viewTrain, history: viewHistory, progress: viewProgress, body: viewBody, chat: viewChat, coach: viewCoach }[S.tab]();
   }
   $('#app').innerHTML = `<header class="top"><div class="logo">LIFT</div>${S.user && !S.loading ? sign : ''}</header><main>${body}</main>`;
   $('#tabs').innerHTML = !tabs ? '' : TABS.map(([k, l]) => `<button class="tab ${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${ICONS[k]}<span>${l}</span>${k === 'train' && S.active ? '<b class="dot"></b>' : ''}</button>`).join('');
@@ -889,7 +897,7 @@ async function testKey() {
 }
 
 async function exportData() {
-  const data = { app: 'lift', v: 2, exportedAt: Date.now(), exercises: S.exercises, workouts: S.workouts, routines: S.routines, cfg: Object.fromEntries(SYNCED.map(k => [k, cfg[k]])) };
+  const data = { app: 'lift', v: 2, exportedAt: Date.now(), exercises: S.exercises, workouts: S.workouts, routines: S.routines, body: S.body, facts: S.facts, cfg: Object.fromEntries(SYNCED.map(k => [k, cfg[k]])) };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const file = new File([blob], `lift-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -912,6 +920,9 @@ async function importData(file) {
     await backend.saveMany(S.user.uid, 'exercises', custom);
     await backend.saveMany(S.user.uid, 'workouts', workouts);
     await backend.saveMany(S.user.uid, 'routines', routines);
+    const body = (d.body || []).filter(m => m && m.id && m.ts).map(m => ({ ...m, fromAI: undefined })), facts = (d.facts || []).filter(f => f && f.id && f.text);
+    if (body.length) await backend.saveMany(S.user.uid, 'body', body);
+    if (facts.length) await backend.saveMany(S.user.uid, 'facts', facts);
     alert(`Import terminé : ${workouts.length} séance(s).`);
   } catch (e) { alert(e.message === 'nouser' ? 'Connecte-toi d’abord.' : 'Import impossible : fichier invalide ou erreur réseau.'); }
 }
@@ -922,7 +933,24 @@ document.addEventListener('click', async ev => {
   unlockAudio();
   const a = t.dataset.act, id = t.dataset.id, entry = () => S.active.entries.find(x => x.id === t.closest('.entry').dataset.e);
   switch (a) {
-    case 'tab': S.tab = t.dataset.t; closeSheet(); render(); window.scrollTo(0, 0); break;
+    case 'tab': S.tab = t.dataset.t; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
+    case 'chat-send': sendChat(); break;
+    case 'chat-ex': sendChat(t.dataset.q); break;
+    case 'chat-attach': if (!warnImages()) break; pickFile(false, async f => { try { S.chatImg = await resizeImage(f[0]); } catch (e) { S.chatErr = e.message; } render(); }); break;
+    case 'chat-rmimg': S.chatImg = null; render(); break;
+    case 'chat-clear': if (confirm('Effacer toute la conversation ? (La mémoire du coach est conservée.)')) { S.chat.forEach(m => del('chat', m.id)); S.chat = []; S.memoSug = []; render(); } break;
+    case 'memo-open': openMemory(); break;
+    case 'memo-add': { const v = ($('#mem-new').value || '').trim().slice(0, 200); if (v) { const f = { id: uid(), text: v, ts: Date.now() }; S.facts.push(f); put('facts', f); } openMemory(); break; }
+    case 'memo-del': S.facts = S.facts.filter(f => f.id !== id); del('facts', id); openMemory(); break;
+    case 'memo-yes': { const m = S.memoSug[+t.dataset.i]; if (m) { const f = { id: uid(), text: m, ts: Date.now() }; S.facts.push(f); put('facts', f); S.memoSug.splice(+t.dataset.i, 1); render(); } break; }
+    case 'memo-no': S.memoSug.splice(+t.dataset.i, 1); render(); break;
+    case 'body-import': if (!warnImages()) break; pickFile(true, importBody); break;
+    case 'body-new': bodyForm({}); break;
+    case 'body-open': { const m = S.body.find(x => x.id === id); if (m) bodyForm(m); break; }
+    case 'body-save': saveBodyForm(id || ''); break;
+    case 'body-del': if (confirm('Supprimer cette mesure ?')) { S.body = S.body.filter(x => x.id !== id); del('body', id); closeSheet(); render(); } break;
+    case 'body-metric': S.bodyMetric = t.dataset.k; render(); break;
+    case 'body-analyze': analyzeBody(); break;
     case 'hint': try { localStorage.setItem('lift.hint', '1'); } catch (e) { } render(); break;
     case 'start': startWorkout(); break;
     case 'startroutine': { const r = S.routines.find(x => x.id === id); if (r) startWorkout(r.exIds.filter(ex), r.name); break; }
@@ -971,6 +999,7 @@ document.addEventListener('click', async ev => {
 document.addEventListener('input', ev => {
   const t = ev.target;
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
+  if (t.dataset.f === 'chat') { S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; return; }
   if (t.dataset.f === 'wname' && S.active) { S.active.name = t.value; persist(); return; }
   if (t.dataset.f === 'note' && S.active) { const en = S.active.entries.find(x => x.id === t.closest('.entry')?.dataset.e); if (en) { en.note = t.value.slice(0, 500); persist(); } return; }
   if ((t.dataset.f === 'w' || t.dataset.f === 'r') && S.active) {
@@ -1027,6 +1056,219 @@ document.addEventListener('submit', async ev => {
 window.addEventListener('online', renderSoft);
 window.addEventListener('offline', renderSoft);
 window.addEventListener('pagehide', flush);
+
+/* ---------- chat IA avec mémoire ---------- */
+const CHAT_SYSTEM = `Tu es le coach personnel de l'utilisateur dans l'app Lift : expert en musculation (hypertrophie, force, périodisation), en anatomie du mouvement et en nutrition sportive générale. Tu discutes avec lui sur la durée.
+Règles :
+- Tu t'appuies sur le CONTEXTE fourni (profil, mémoire, séances, composition corporelle) et sur la conversation. N'invente jamais de données : si une information manque, demande-la ou dis-le.
+- Réponds en français, de façon concrète et directement exploitable : charges en kg, séries × répétitions, jours de la semaine quand tu proposes un programme. Reste concis (moins de 200 mots) sauf si on te demande un programme détaillé.
+- Format : puces "- " et **gras** pour les points clés ; titres "## " seulement pour les réponses longues.
+- Santé : tu ne poses aucun diagnostic et ne remplaces ni un médecin ni un diététicien. En cas de douleur, de blessure ou de trouble alimentaire évoqué, reste prudent et recommande un avis professionnel. Pas de régime extrême.
+- Mémoire : quand l'utilisateur donne une information durable utile pour l'accompagner (blessure, matériel disponible, contrainte d'emploi du temps, préférence, objectif précis), ajoute à la FIN de ta réponse, sur une ligne séparée, [[MEMO: fait court à retenir]] (2 au maximum, seulement s'il est nouveau et absent de la MÉMOIRE).`;
+
+/* composition corporelle */
+const BODY_FIELDS = [
+  ['weight', 'Poids', 'kg'], ['bodyFat', 'Taux de graisse (TGC)', '%'], ['fatMass', 'Masse grasse (MGC)', 'kg'], ['leanMass', 'Masse maigre (MMC)', 'kg'],
+  ['smm', 'Masse musculaire squelettique (MMS)', 'kg'], ['muscle', 'Masse musculaire', 'kg'], ['tbw', 'Eau corporelle totale', 'kg'],
+  ['protein', 'Masse de protéines', 'kg'], ['minerals', 'Sels inorganiques', 'kg'], ['bmi', 'IMC', ''], ['bmr', 'Métabolisme de base', 'kcal/j'],
+  ['metaAge', 'Âge métabolique', 'ans'], ['whr', 'Rapport taille/hanches (RTH)', ''], ['visceral', 'Graisse viscérale (niveau)', '']
+];
+const BODY_SEG = [['la', 'Bras gauche'], ['ra', 'Bras droit'], ['trunk', 'Tronc'], ['ll', 'Jambe gauche'], ['rl', 'Jambe droite']];
+const BODY_RANGE = { weight: [20, 300], bodyFat: [1, 70], fatMass: [0.5, 200], leanMass: [10, 200], smm: [5, 100], muscle: [5, 150], tbw: [10, 150], protein: [1, 50], minerals: [0.5, 15], bmi: [10, 70], bmr: [600, 5000], metaAge: [5, 100], whr: [0.5, 1.5], visceral: [0, 30] };
+const BODY_METRICS = [['weight', 'Poids', 'kg'], ['bodyFat', 'TGC', '%'], ['smm', 'Muscle (MMS)', 'kg'], ['fatMass', 'Masse grasse', 'kg'], ['leanMass', 'Masse maigre', 'kg']];
+
+const sortBy = (list, k) => list.sort((a, b) => (a[k] || 0) - (b[k] || 0));
+function applyChat(list) { sortBy(list, 'ts'); if (JSON.stringify(list) === JSON.stringify(S.chat)) return; S.chat = list; renderSoft(); }
+function applyFacts(list) { sortBy(list, 'ts'); if (JSON.stringify(list) === JSON.stringify(S.facts)) return; S.facts = list; renderSoft(); }
+function applyBody(list) { sortBy(list, 'ts'); if (JSON.stringify(list) === JSON.stringify(S.body)) return; S.body = list; renderSoft(); }
+
+const asym = (l, r) => l > 0 && r > 0 ? Math.round((r - l) / ((l + r) / 2) * 1000) / 10 : null;
+function bodyLine(m) {
+  const g = (k, u) => m[k] != null ? `${k === 'weight' ? 'poids' : k === 'bodyFat' ? 'TGC' : k === 'smm' ? 'MMS' : k === 'fatMass' ? 'masse grasse' : k === 'leanMass' ? 'masse maigre' : k} ${fmt(m[k])} ${u}`.trim() : null;
+  const main = [g('weight', 'kg'), g('bodyFat', '%'), g('fatMass', 'kg'), g('leanMass', 'kg'), g('smm', 'kg'), g('visceral', ''), g('bmr', 'kcal/j')].filter(Boolean).join(', ');
+  const seg = BODY_SEG.filter(([k]) => m['sm_' + k] != null).map(([k, l]) => `${l.toLowerCase()} ${fmt(m['sm_' + k])} kg`).join(', ');
+  const al = asym(m.sm_la, m.sm_ra), ll = asym(m.sm_ll, m.sm_rl);
+  return `- ${new Date(m.ts).toLocaleDateString('fr-FR')} : ${main || 'données partielles'}` + (seg ? ` | muscle par segment : ${seg}` : '')
+    + (al != null || ll != null ? ` | écart droite/gauche : ${al != null ? 'bras ' + (al > 0 ? '+' : '') + fmt(al) + ' %' : ''}${al != null && ll != null ? ', ' : ''}${ll != null ? 'jambes ' + (ll > 0 ? '+' : '') + fmt(ll) + ' %' : ''}` : '');
+}
+const bodyContext = (n = 3) => S.body.length ? `COMPOSITION CORPORELLE (mesures par impédancemétrie, approximatives : l'hydratation et l'heure les font varier) :\n${S.body.slice(-n).map(bodyLine).join('\n')}` : '';
+
+function chatContext() {
+  const parts = [profileLine()];
+  if (S.facts.length) parts.push('MÉMOIRE (faits retenus sur l\'utilisateur) :\n' + S.facts.map(f => '- ' + f.text).join('\n'));
+  const fw = finished();
+  if (fw.length) {
+    parts.push('ENTRAÎNEMENT (4 dernières semaines, séances/semaine et séries par groupe) :\n' + weeksSummary(4).map(x => `- semaine du ${fmtDate(x.a)} : ${x.c} séance(s) — séries : ${fmtMuscles(x.mu)}`).join('\n'));
+    parts.push('DERNIÈRES SÉANCES :\n' + fw.slice(-4).map(w => `- ${fmtDate(w.startedAt)} « ${w.name} » : ` + w.entries.map(e => {
+      const ws = workSets(e); if (!ws.length) return null;
+      return `${exName(e.exId)} ${ws.map(setTxt).join(', ')}` + (e.note && e.note.trim() ? ` (commentaire : ${e.note.trim().replace(/\s+/g, ' ')})` : '');
+    }).filter(Boolean).join(' ; ')).join('\n'));
+  } else parts.push('ENTRAÎNEMENT : aucune séance enregistrée pour le moment.');
+  parts.push(bodyContext());
+  return parts.filter(Boolean).join('\n\n').slice(0, 9000);
+}
+
+function parseMemos(t) {
+  const memos = []; const clean = t.replace(/\[\[\s*MEMO\s*:\s*([^\]]+?)\s*\]\]/gi, (_, m) => { memos.push(m.trim().slice(0, 200)); return ''; }).trim();
+  return { clean, memos };
+}
+function chatContents(img) {
+  const out = [];
+  for (const m of S.chat.slice(-20)) {
+    const role = m.role === 'model' ? 'model' : 'user', last = out[out.length - 1];
+    if (last && last.role === role) last.parts[0].text += '\n\n' + m.text; else out.push({ role, parts: [{ text: m.text }] });
+  }
+  while (out.length && out[0].role !== 'user') out.shift();
+  if (img && out.length) out[out.length - 1].parts.push({ inlineData: { mimeType: img.mime, data: img.data } });
+  return out;
+}
+const scrollEnd = () => setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 30);
+async function sendChat(textOverride) {
+  const text = (textOverride != null ? textOverride : S.chatDraft || '').trim();
+  if ((!text && !S.chatImg) || S.chatBusy) return;
+  if (!cfg.apiKey) { S.chatErr = 'Ajoute ta clé Gemini dans l’onglet Coach.'; render(); return; }
+  const img = S.chatImg, um = { id: uid(), role: 'user', text: text || '(image envoyée)', img: !!img, ts: Date.now() };
+  S.chat.push(um); put('chat', um);
+  S.chatDraft = ''; S.chatImg = null; S.chatBusy = true; S.chatErr = ''; S.memoSug = []; render(); scrollEnd();
+  try {
+    const reply = await geminiCall({ system: CHAT_SYSTEM + '\n\nCONTEXTE :\n' + chatContext(), contents: chatContents(img), maxTokens: 4096 });
+    const { clean, memos } = parseMemos(reply);
+    const am = { id: uid(), role: 'model', text: clean || reply, ts: Date.now() };
+    S.chat.push(am); put('chat', am);
+    S.memoSug = memos.filter(m => !S.facts.some(f => norm(f.text) === norm(m)));
+  } catch (e) { S.chatErr = e.message; }
+  S.chatBusy = false; render(); scrollEnd();
+}
+
+function viewChat() {
+  const msgs = S.chat.map(m => `<div class="msg ${m.role === 'model' ? 'ai' : 'me'}">${m.role === 'model' ? md(m.text) : esc(m.text).replace(/\n/g, '<br>')}${m.img ? '<div class="imgtag">📷 image envoyée (non conservée)</div>' : ''}</div>`).join('');
+  const starters = ['Propose-moi un programme pour la semaine', 'Quels sont mes points faibles ?', 'Que manger avant et après l’entraînement ?'];
+  const memo = S.memoSug.map((m, i) => `<div class="memo"><span>🧠 Retenir : « ${esc(m)} »</span><button class="btn sm primary" data-act="memo-yes" data-i="${i}">Retenir</button><button class="btn sm" data-act="memo-no" data-i="${i}">Non</button></div>`).join('');
+  return `<div class="row chat-top"><b>Coach IA</b><button class="btn sm" data-act="memo-open">🧠 Mémoire (${S.facts.length})</button><button class="btn sm" data-act="chat-clear" ${S.chat.length ? '' : 'disabled'}>Effacer</button></div>
+  <div class="chat">${msgs || `<div class="muted chat-empty">Pose une question sur un exercice, un programme, la nutrition… Le coach connaît ton profil, tes séances et ta composition corporelle, et se souvient de la conversation.<div class="chips2" style="margin-top:12px">${starters.map(q => `<button class="sc" data-act="chat-ex" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`}
+    ${S.chatBusy ? '<div class="msg ai"><div class="loading"><i></i>Le coach réfléchit…</div></div>' : ''}${memo}${S.chatErr ? `<div class="err">${esc(S.chatErr)}</div>` : ''}</div>
+  <div class="composer">${S.chatImg ? '<div class="attached">📷 Image jointe (envoyée à Gemini, non conservée) <button data-act="chat-rmimg">✕</button></div>' : ''}
+    <div class="cbar"><button class="x" data-act="chat-attach" aria-label="Joindre une image">📷</button><textarea id="chat-in" data-f="chat" rows="1" maxlength="2000" placeholder="Écris au coach…" aria-label="Message">${esc(S.chatDraft)}</textarea><button class="btn primary sm" data-act="chat-send" ${S.chatBusy ? 'disabled' : ''}>Envoyer</button></div></div>`;
+}
+
+function openMemory() {
+  sheet(`<h3>Mémoire du coach</h3><p class="muted" style="margin:-6px 0 12px;font-size:14px">Les faits ci-dessous sont transmis au coach à chaque message. Ajoute, modifie par suppression, ou efface ce que tu veux.</p>
+    <div id="mem-list">${S.facts.map(f => `<div class="fact"><span>${esc(f.text)}</span><button class="x" data-act="memo-del" data-id="${f.id}" aria-label="Supprimer">✕</button></div>`).join('') || '<p class="empty">Rien de retenu pour l’instant.</p>'}</div>
+    <input id="mem-new" class="field" maxlength="200" placeholder="Ex. épaule droite sensible, haltères max 30 kg à la maison" autocomplete="off">
+    <div class="pk-foot"><button class="btn ghost" data-act="closesheet">Fermer</button><button class="btn primary" data-act="memo-add">Ajouter</button></div>`);
+}
+
+/* images : réduction avant envoi (le plus léger possible) */
+function resizeImage(file, max = 1280) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res({ mime: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.82).split(',')[1] });
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Image illisible.')); };
+    im.src = url;
+  });
+}
+const warnImages = () => {
+  let ok = false; try { ok = localStorage.getItem('lift.imgwarn') === '1'; } catch (e) { }
+  if (ok) return true;
+  if (!confirm('Avec une clé Gemini gratuite, Google peut utiliser les images envoyées pour améliorer ses produits et les faire relire par des humains. Ne joins pas de photo sensible ni de capture avec ton nom. Continuer ?')) return false;
+  try { localStorage.setItem('lift.imgwarn', '1'); } catch (e) { }
+  return true;
+};
+function pickFile(multiple, cb) {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = !!multiple; i.style.display = 'none';
+  i.onchange = () => { const f = [...i.files]; i.remove(); if (f.length) cb(f); }; document.body.appendChild(i); i.click();
+}
+
+/* onglet Corps */
+function viewBody() {
+  const b = S.body, last = b[b.length - 1], met = BODY_METRICS.find(m => m[0] === S.bodyMetric) || BODY_METRICS[0];
+  const pts = b.filter(m => m[met[0]] != null).map(m => ({ t: m.ts, v: m[met[0]] }));
+  let an = null; try { an = JSON.parse(localStorage.getItem('lift.bodyAnalysis') || 'null'); } catch (e) { }
+  const seg = last && BODY_SEG.some(([k]) => last['sm_' + k] != null) ? `<div class="lbl sec" style="margin-top:16px">Muscle par segment (dernière mesure)</div><div class="chips2">${BODY_SEG.filter(([k]) => last['sm_' + k] != null).map(([k, l]) => `<span class="sc">${l} ${fmt(last['sm_' + k])} kg</span>`).join('')}</div>
+    ${[['bras', 'la', 'ra'], ['jambes', 'll', 'rl']].map(([n, l, r]) => { const a = asym(last['sm_' + l], last['sm_' + r]); return a == null ? '' : `<div class="muted" style="font-size:14px">Écart droite/gauche, ${n} : <b>${a > 0 ? '+' : ''}${fmt(a)} %</b> ${Math.abs(a) >= 5 ? '(à surveiller)' : '(équilibré)'}</div>`; }).join('')}` : '';
+  return `<div class="lbl" style="margin-bottom:10px">Composition corporelle</div>
+  <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Importe les captures de ton bilan (balance ou scanner à impédancemétrie) : Gemini lit les chiffres, tu les vérifies, puis l’app suit ton évolution. Les captures ne sont pas conservées, seuls les chiffres le sont.</p>
+    <div class="row"><button class="btn primary" data-act="body-import">📷 Importer des captures</button><button class="btn" data-act="body-new">Saisir à la main</button></div>
+    ${S.bodyBusy ? '<div class="loading"><i></i>Lecture des captures par Gemini…</div>' : ''}${S.bodyMsg ? `<div class="err">${esc(S.bodyMsg)}</div>` : ''}</section>
+  ${last ? `<div class="lbl sec">Évolution</div><section class="card"><div class="chips" style="margin-bottom:0">${BODY_METRICS.map(([k, l]) => `<button class="chip ${met[0] === k ? 'on' : ''}" data-act="body-metric" data-k="${k}">${l}</button>`).join('')}</div>
+    ${pts.length ? lineChart(pts, met[2]) : '<p class="empty">Pas de valeur pour cette mesure.</p>'}${seg}</section>
+  <div class="lbl sec">Analyse du coach</div><section class="card"><button class="btn primary" data-act="body-analyze" id="banbtn">Analyser ma composition</button><div id="banout">${an ? `<div class="review">${md(an.text)}<div class="meta">${new Date(an.ts).toLocaleDateString('fr-FR')} · ${esc(an.model)}</div></div>` : ''}</div></section>
+  <div class="lbl sec">Mesures</div>${b.slice().reverse().map(m => `<button class="card bm" data-act="body-open" data-id="${m.id}"><b>${new Date(m.ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</b><span class="muted">${[m.weight != null ? fmt(m.weight) + ' kg' : '', m.bodyFat != null ? 'TGC ' + fmt(m.bodyFat) + ' %' : '', m.smm != null ? 'MMS ' + fmt(m.smm) + ' kg' : ''].filter(Boolean).join(' · ')}</span></button>`).join('')}` : '<p class="empty" style="margin-top:24px">Aucune mesure pour l’instant.</p>'}`;
+}
+
+function bodyForm(m) {
+  const dt = new Date(m.ts || Date.now()), iso = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const inp = (k, l, u, v) => `<div><label class="l">${l}${u ? ' (' + u + ')' : ''}</label><input class="field" data-bf="${k}" inputmode="decimal" value="${v != null ? fmtIn(v) : ''}" autocomplete="off"></div>`;
+  sheet(`<h3>${m.id ? 'Mesure' : 'Nouvelle mesure'}</h3>
+    ${m.fromAI ? '<p class="muted" style="margin:-6px 0 8px;font-size:14px"><b>Vérifie les chiffres</b> lus par Gemini avant d’enregistrer (une erreur de lecture est possible). Laisse vide ce qui n’est pas disponible.</p>' : ''}
+    <label class="l" style="margin-top:0">Date de la mesure</label><input class="field" type="date" id="bf-date" value="${iso}">
+    <div class="bf-grid">${BODY_FIELDS.map(([k, l, u]) => inp(k, l, u, m[k])).join('')}</div>
+    <div class="lbl sec" style="margin-top:12px">Masse musculaire par segment (kg)</div><div class="bf-grid">${BODY_SEG.map(([k, l]) => inp('sm_' + k, l, '', m['sm_' + k])).join('')}</div>
+    <div class="lbl sec" style="margin-top:12px">Masse grasse par segment (kg)</div><div class="bf-grid">${BODY_SEG.map(([k, l]) => inp('sf_' + k, l, '', m['sf_' + k])).join('')}</div>
+    <div class="pk-foot">${m.id ? `<button class="btn ghost" data-act="body-del" data-id="${m.id}" style="color:#ff8a4c">Supprimer</button>` : '<button class="btn ghost" data-act="closesheet">Annuler</button>'}<button class="btn primary" data-act="body-save" data-id="${m.id || ''}">Enregistrer</button></div>`);
+}
+function saveBodyForm(id) {
+  const old = S.body.find(x => x.id === id) || {}, o = { ...old, id: id || uid() };
+  const d = $('#bf-date').value; o.ts = d ? new Date(d + 'T12:00:00').getTime() : Date.now(); o.updatedAt = Date.now();
+  let any = false;
+  document.querySelectorAll('[data-bf]').forEach(el => { const v = num(el.value), k = el.dataset.bf; if (v == null || v < 0) delete o[k]; else { o[k] = v; any = true; } });
+  if (!any) { alert('Renseigne au moins une valeur.'); return; }
+  const i = S.body.findIndex(x => x.id === o.id); if (i >= 0) S.body[i] = o; else S.body.push(o);
+  sortBy(S.body, 'ts'); put('body', o); closeSheet(); render();
+}
+
+const BODY_PROMPT = `Ces images sont des captures d'écran d'un bilan de composition corporelle (balance ou scanner à impédancemétrie). Extrais UNIQUEMENT les valeurs numériques affichées, sans rien inventer ni calculer. Ignore le nom, l'âge, la taille et les textes de conclusion. Réponds par un seul objet JSON avec ces clés (null si la valeur n'est pas visible) :
+{"date": "AAAA-MM-JJ" ou null, "weight": poids en kg, "bodyFat": TGC / taux de graisse en %, "fatMass": MGC masse grasse en kg, "leanMass": MMC masse maigre en kg, "smm": MMS masse musculaire squelettique en kg, "muscle": masse musculaire en kg, "tbw": eau corporelle totale en kg, "protein": masse de protéines en kg, "minerals": sel inorganique en kg, "bmi": IMC, "bmr": métabolisme de base en kcal/j, "metaAge": âge métabolique, "whr": RTH (rapport taille/hanches), "visceral": niveau de graisse viscérale,
+"segMuscle": {"la": bras gauche, "ra": bras droit, "trunk": tronc, "ll": jambe gauche, "rl": jambe droite} (masse musculaire par segment en kg ; « Gauche » et « Droite » sont indiqués sur le schéma), "segFat": {mêmes clés} (masse graisseuse par segment en kg, si visible)}
+Les valeurs sont des nombres (point décimal).`;
+async function extractBody(files) {
+  const parts = [{ text: BODY_PROMPT }];
+  for (const f of files.slice(0, 8)) { const im = await resizeImage(f, 1600); parts.push({ inlineData: { mimeType: im.mime, data: im.data } }); }
+  const t = await geminiCall({ system: 'Tu extrais des données chiffrées de captures d\'écran. Tu réponds uniquement par un objet JSON valide, sans texte autour.', contents: [{ role: 'user', parts }], json: true, temperature: 0, maxTokens: 2048 });
+  let j; try { j = JSON.parse(t.replace(/^```json|```$/g, '').trim()); } catch (e) { throw new Error('Lecture impossible : réponse inattendue de Gemini. Réessaie ou saisis à la main.'); }
+  const m = { fromAI: true, ts: Date.now() };
+  for (const [k, [lo, hi]] of Object.entries(BODY_RANGE)) { const v = num(j[k]); if (v != null && v >= lo && v <= hi) m[k] = v; }
+  for (const [pre, src] of [['sm_', j.segMuscle], ['sf_', j.segFat]]) if (src && typeof src === 'object') for (const [k] of BODY_SEG) { const v = num(src[k]); if (v != null && v >= 0.1 && v <= 80) m[pre + k] = v; }
+  if (j.date && /^\d{4}-\d{2}-\d{2}$/.test(j.date)) { const ts = new Date(j.date + 'T12:00:00').getTime(); if (ts <= Date.now() + 86400000 && ts > Date.now() - 5 * 365 * 86400000) m.ts = ts; }
+  if (!Object.keys(m).some(k => k !== 'fromAI' && k !== 'ts')) throw new Error('Aucune valeur reconnue sur ces captures.');
+  return m;
+}
+async function importBody(files) {
+  if (!cfg.apiKey) { S.bodyMsg = 'Ajoute ta clé Gemini dans l’onglet Coach.'; render(); return; }
+  S.bodyBusy = true; S.bodyMsg = ''; render();
+  try { const m = await extractBody(files); S.bodyBusy = false; render(); bodyForm(m); }
+  catch (e) { S.bodyBusy = false; S.bodyMsg = e.message; render(); }
+}
+function bodyAnalysisPrompt() {
+  return `${profileLine()}
+
+${S.facts.length ? 'MÉMOIRE :\n' + S.facts.map(f => '- ' + f.text).join('\n') + '\n\n' : ''}${bodyContext(8)}
+
+ENTRAÎNEMENT (6 dernières semaines, séances/semaine et séries par groupe) :
+${weeksSummary(6).map(x => `- semaine du ${fmtDate(x.a)} : ${x.c} séance(s) — séries : ${fmtMuscles(x.mu)}`).join('\n')}
+
+Rédige une analyse (maximum 250 mots) :
+## Lecture de la dernière mesure (ce qui est dans la norme, ce qui s'écarte, en restant nuancé : l'impédancemétrie est approximative)
+## Évolution (par rapport aux mesures précédentes, avec les écarts chiffrés ; s'il n'y a qu'une mesure, dis-le)
+## Points faibles et asymétries (par segment, écart droite/gauche)
+## Conséquences pour l'entraînement (ajustements concrets : groupes à prioriser, séries par semaine, travail unilatéral) et pour l'alimentation (repères généraux)
+Ne pose aucun diagnostic.`;
+}
+async function analyzeBody() {
+  const b = $('#banbtn'), out = $('#banout'); if (!b) return;
+  b.disabled = true; out.innerHTML = '<div class="loading"><i></i>Le coach analyse ta composition…</div>';
+  try {
+    const text = await gemini(bodyAnalysisPrompt()), a = { text, ts: Date.now(), model: cfg.model };
+    try { localStorage.setItem('lift.bodyAnalysis', JSON.stringify(a)); } catch (e) { }
+    out.innerHTML = `<div class="review">${md(text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>`;
+  } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  b.disabled = false;
+}
 
 /* ---------- démarrage ---------- */
 (function init() {
