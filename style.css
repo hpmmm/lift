@@ -139,10 +139,12 @@ h4{margin:14px 0 4px;font:700 12px var(--mono);letter-spacing:.14em;text-transfo
 #sheet{position:fixed;inset:0;z-index:60;display:none}
 #sheet.open{display:block}
 #sheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.65)}
-#sheet .panel{position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:90vh;overflow:auto;
+#sheet .panel{position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:90vh;max-height:calc(100dvh - 56px);overflow:auto;
   background:#101012;border:1px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;
   padding:8px 16px calc(18px + var(--sab));-webkit-overflow-scrolling:touch}
-#sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 14px}
+#sheet .sheet-bar{position:sticky;top:-8px;z-index:3;margin:-8px -16px 6px;padding:8px 16px 4px;background:#101012;height:34px}
+#sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 0}
+#sheet .sheet-x{position:absolute;right:12px;top:4px;width:34px;height:34px;border-radius:17px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:15px}
 .field{width:100%;height:46px;border-radius:11px;border:1px solid var(--line);background:var(--panel2);
   padding:0 14px;outline:none;margin-bottom:10px;appearance:none;-webkit-appearance:none}
 .field:focus{border-color:var(--red)}
@@ -280,3 +282,42 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .tile{position:relative}
 .badge{position:absolute;top:8px;right:10px;min-width:20px;height:20px;border-radius:10px;background:var(--red);color:#fff;font:700 12px var(--mono);display:flex;align-items:center;justify-content:center;font-style:normal;padding:0 5px}
 .prow .val{font:700 15px var(--mono);margin-left:auto}
+
+/* records vitrine */
+.prc{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.prc-i{flex:none}
+.prc-i .thumb{width:40px;height:40px}
+.prc-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.prc-t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prc-t small{color:var(--mute);font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.prc-v{text-align:right;flex:none}
+.prc-v b{display:block;font:800 18px var(--mono);color:var(--red)}
+.prc-v span{font:600 12px var(--mono);color:var(--mute)}
+.prstrip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(42%,1fr);gap:10px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.prs-i{scroll-snap-align:start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.prs-i b{font:800 20px var(--mono);color:var(--red)}
+.prs-i span{font:600 12px var(--mono);color:var(--mute)}
+.prs-i small{color:var(--text);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* calendrier */
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-nav b{font-size:16px}
+.cal-nav .x{width:36px;height:36px;border-radius:18px;border:1px solid var(--line);background:var(--panel2);font-size:18px;color:var(--text)}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.cal-dow i{font:600 11px var(--mono);color:var(--mute);text-align:center;font-style:normal}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-c{aspect-ratio:1;border-radius:7px;background:#3c3c42;border:0;color:#d8d8dc;font:600 13px var(--mono);display:flex;align-items:center;justify-content:center;font-style:normal;padding:0}
+.cal-c.pad{background:none}
+.cal-c.on{background:var(--red);color:#fff;box-shadow:var(--glow)}
+.cal-c.today{outline:2px solid var(--text);outline-offset:-2px}
+.cal-grid.mini{gap:2px}
+.cal-grid.mini .cal-c{border-radius:2px;font-size:0}
+.cal-year{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.cal-mini b{display:block;font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
+.cal-day{padding:10px 0;border-top:1px solid var(--line)}
+.cal-day .cal-dn{font-weight:650;font-size:14px}
+.cal-day.on .cal-dn{color:var(--red)}
+/* suggestion de charge */
+.sugg{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--red2);border-radius:11px;padding:8px 12px;margin:2px 0 10px;flex-wrap:wrap}
+.sugg .sg-l{font:600 10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.sugg b{font:800 16px var(--mono);color:var(--red)}
+.sugg small{color:var(--mute);font-size:12px;flex-basis:100%}
