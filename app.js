@@ -133,8 +133,8 @@ const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
 // Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false };
-const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked'];
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}' };
+const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
 const storeCfg = () => { try { localStorage.setItem('lift.cfg', JSON.stringify(cfg)); } catch (e) { } };
@@ -211,6 +211,12 @@ const thumb = e => e.img ? `<img class="thumb" src="${IMG_BASE}${e.img}/0.jpg" a
 const eyeBtn = (e, cls) => e && (e.img || hasMap(e)) ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
 const finished = () => S.workouts.filter(w => w.endedAt).sort((a, b) => a.startedAt - b.startedAt);
 const newSet = () => ({ w: null, r: null, done: false, type: 'N' });
+// Temps de repos : valeur par défaut des réglages, ou valeur propre à l'exercice.
+const restMap = () => { try { return JSON.parse(cfg.restEx || '{}') || {}; } catch (e) { return {}; } };
+const defRest = () => num(cfg.rest) > 0 ? Math.round(num(cfg.rest)) : 90;
+const restFor = id => { const v = restMap()[id]; return v > 0 ? v : defRest(); };
+const restLabel = n => n >= 120 && n % 60 === 0 ? n / 60 + ' min' : n + ' s';
+function setRestFor(id, sec) { const m = restMap(); if (sec) m[id] = sec; else delete m[id]; cfg.restEx = JSON.stringify(m); saveCfg(); }
 
 /* ---------- synchro cloud ---------- */
 function syncError(e) {
@@ -224,12 +230,15 @@ function put(col, obj) {
   backend.save(S.user.uid, col, obj).catch(syncError);
 }
 function del(col, id) { if (S.user) backend.remove(S.user.uid, col, id).catch(syncError); }
-let saveTimer = null;
-function flush() { clearTimeout(saveTimer); saveTimer = null; if (S.active) put('workouts', S.active); }
+let saveTimer = null, editId = null;
+// W() = séance sur laquelle on écrit : celle en cours, ou une séance passée en cours de modification.
+const W = () => editId ? S.workouts.find(w => w.id === editId) : S.active;
+const editing = () => !!editId && !!W();
+function flush() { clearTimeout(saveTimer); saveTimer = null; const w = W(); if (w) put('workouts', w); }
 // Sauvegarde de la séance en cours, regroupée pour limiter les écritures (quota gratuit).
 function persist() {
-  if (!S.active) return;
-  S.active.updatedAt = Date.now();
+  const w = W(); if (!w) return;
+  w.updatedAt = Date.now();
   clearTimeout(saveTimer); saveTimer = setTimeout(flush, 500);
 }
 const typing = () => { const a = document.activeElement; return !!a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName); };
@@ -271,9 +280,9 @@ function endSession() {
   rest = null; drawRest(); unwake(); closeSheet(); render();
 }
 function applyWorkouts(list) {
-  const local = S.active;
-  // On garde notre version locale de la séance en cours tant qu'elle est plus récente que celle du cloud.
-  const merged = list.map(w => (local && w.id === local.id && !(w.updatedAt > local.updatedAt)) ? local : w);
+  // On garde nos versions locales (séance en cours, séance en cours de modification) tant qu'elles sont plus récentes que le cloud.
+  const keep = [S.active, editId ? S.workouts.find(x => x.id === editId) : null].filter(Boolean);
+  const merged = list.map(w => { const l = keep.find(k => k.id === w.id); return (l && !(w.updatedAt > l.updatedAt)) ? l : w; });
   const sig = a => a.map(w => w.id + ':' + (w.updatedAt || 0) + (w.endedAt ? 'e' : '')).sort().join();
   const changed = sig(merged) !== sig(S.workouts);
   S.workouts = merged;
@@ -333,7 +342,7 @@ function exHistory(exId, beforeTs = Infinity) {
   }
   return out;
 }
-const prevFor = exId => { const h = exHistory(exId, S.active ? S.active.startedAt : Infinity); return h[h.length - 1] || null; };
+const prevFor = exId => { const t = W(); const h = exHistory(exId, t ? t.startedAt : Infinity); return h[h.length - 1] || null; };
 
 function muscleSets(from, to) {
   const o = {};
@@ -407,7 +416,7 @@ async function geminiCall({ contents, system = SYSTEM, json = false, temperature
 function profileLine() {
   return `Objectif : ${GOALS[cfg.goal].ia}. Niveau : ${cfg.level}. Fréquence visée : ${cfg.perWeek} séances/semaine.` + (num(cfg.bw) ? ` Poids de corps : ${fmt(num(cfg.bw))} kg.` : '');
 }
-const setTxt = s => `${fmt(setW(s))}×${s.r}`;
+const setTxt = s => `${fmt(setW(s))}×${s.r}${s.rir != null ? ` (RIR ${s.rir})` : ''}`;
 
 function sessionPrompt(w) {
   const lines = w.entries.map(e => {
@@ -619,7 +628,20 @@ function installHint() {
   return `<div class="card hint"><span>Pour l'installer comme une vraie app : bouton <b>Partager</b> de Safari → <b>Sur l'écran d'accueil</b>.</span><button class="x" data-act="hint">✕</button></div>`;
 }
 
-function viewTrain() { return S.active ? viewActive() : viewStart(); }
+function viewTrain() { return editing() ? viewEdit() : S.active ? viewActive() : viewStart(); }
+
+function viewEdit() {
+  const w = W(), mins = Math.max(1, Math.round((w.endedAt - w.startedAt) / 60000));
+  return `<section class="live edit"><div class="lbl" style="flex:none">Modification</div>
+    <input class="wname" data-f="wname" value="${esc(w.name)}" aria-label="Nom de la séance" autocomplete="off">
+    <button class="btn primary sm" data-act="editdone">Terminer</button></section>
+    <div class="row" style="margin-bottom:12px">
+      <div><label class="l">Date</label><input class="field" data-f="wdate" type="date" value="${new Date(w.startedAt).toISOString().slice(0, 10)}"></div>
+      <div><label class="l">Durée (min)</label><input class="field" data-f="wdur" inputmode="numeric" value="${mins}"></div></div>
+    ${w.entries.map(entryHtml).join('')}
+    <button class="btn ghost" data-act="addex">+ Ajouter un exercice</button>
+    <button class="btn" data-act="editdone" style="margin-top:4px">Terminer les modifications</button>`;
+}
 
 function viewStart() {
   const fw = finished(), ws = mondayOf(Date.now()), n = fw.filter(w => w.startedAt >= ws).length, last = fw[fw.length - 1];
@@ -658,16 +680,17 @@ function entryHtml(e) {
   const rows = e.sets.map((s, i) => {
     const isW = s.type === 'W'; if (!isW) n++;
     const p = !isW && prev ? prev.sets[n - 1] : null, ph = placeholders(e, i);
-    return `<div class="set ${s.done ? 'done' : ''}" data-e="${e.id}" data-i="${i}">
+    return `<div class="set ${cfg.rir ? 'r6' : ''} ${s.done ? 'done' : ''}" data-e="${e.id}" data-i="${i}">
       <button class="setno ${isW ? 'w' : ''}" data-act="settype" aria-label="Type de série">${isW ? 'É' : n}</button>
       <div class="prev">${p ? fmt(setW(p)) + '×' + p.r : '–'}</div>
       <input class="in" data-f="w" inputmode="decimal" autocomplete="off" value="${fmtIn(s.w)}" placeholder="${fmtIn(ph.w)}" aria-label="Charge en kg">
       <input class="in" data-f="r" inputmode="numeric" autocomplete="off" value="${s.r ?? ''}" placeholder="${ph.r}" aria-label="Répétitions">
+      ${cfg.rir ? (isW ? '<i></i>' : `<button class="rir ${s.rir != null ? 'on' : ''}" data-act="rir" aria-label="Répétitions en réserve">${s.rir != null ? s.rir : '–'}</button>`) : ''}
       <button class="chk" data-act="check" aria-label="Valider la série">✓</button></div>`;
   }).join('');
-  return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b>${eyeBtn(ex(e.exId), 'x')}<button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
-    ${suggHtml(e)}
-    <div class="sethead"><span>SÉRIE</span><span>PRÉC.</span><span>KG</span><span>REPS</span><span></span></div>${rows}
+  return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b>${editing() ? '' : `<button class="ehrest" data-act="restex" data-id="${e.exId}">⏱ ${restLabel(restFor(e.exId))}</button>`}${eyeBtn(ex(e.exId), 'x')}<button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
+    ${editing() ? '' : suggHtml(e)}
+    <div class="sethead ${cfg.rir ? 'r6' : ''}"><span>SÉRIE</span><span>PRÉC.</span><span>KG</span><span>REPS</span>${cfg.rir ? '<span>RIR</span>' : ''}<span></span></div>${rows}
     <div class="setbtns"><button data-act="addwarm">+ Échauffement</button><button data-act="rmwarm">− Échauffement</button></div>
     <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button></div>
     <textarea class="note-in" data-f="note" rows="2" maxlength="500" placeholder="Commentaire sur cet exercice (aide d'un partenaire, série délestée, blessure…) — lu par le coach IA" aria-label="Commentaire sur l'exercice">${esc(e.note || '')}</textarea></section>`;
@@ -721,7 +744,8 @@ function viewSettings() {
     <label class="l">Niveau</label>
     <select class="field" data-cfg="level">${LEVELS.map(l => `<option ${cfg.level === l ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <div class="row"><div><label class="l">Poids de corps (kg)</label><input class="field" data-cfg="bw" inputmode="decimal" placeholder="optionnel" value="${esc(cfg.bw)}"></div>
-    <div><label class="l">Repos (secondes)</label><input class="field" data-cfg="rest" inputmode="numeric" value="${cfg.rest}"></div></div>
+    <div><label class="l">Repos par défaut (secondes)</label><input class="field" data-cfg="rest" inputmode="numeric" value="${cfg.rest}"></div></div>
+    <label class="shrow" style="border-top:0;padding-bottom:0"><input type="checkbox" data-cfg="rir" ${cfg.rir ? 'checked' : ''}><span><b>Noter la difficulté (RIR)</b><br><small class="note">Ajoute une colonne pour indiquer combien de répétitions il te restait en réserve. L’objectif de charge et le coach IA en tiennent compte.</small></span></label>
   </section>
 
   <div class="lbl sec">Connexion Gemini</div>
@@ -763,6 +787,15 @@ function ficheBlock(ids, max = 10) {
 }
 
 /* ---------- feuilles (sheets) ---------- */
+function openRestSheet(exId) {
+  const cur = restMap()[exId] || 0;
+  const opt = n => `<button class="chip ${cur === n ? 'on' : ''}" data-act="restset" data-ex="${exId}" data-n="${n}">${restLabel(n)}</button>`;
+  sheet(`<h3>Repos — ${esc(exName(exId))}</h3>
+    <p class="muted" style="margin:-6px 0 12px;font-size:14px">Temps de repos lancé après chaque série de travail de cet exercice.</p>
+    <div class="chips">${[30, 45, 60, 90, 120, 150, 180, 240, 300].map(opt).join('')}</div>
+    <div class="pk-foot"><button class="btn ghost" data-act="restset" data-ex="${exId}" data-n="0">Valeur par défaut (${restLabel(defRest())})</button><button class="btn primary" data-act="closesheet">Fermer</button></div>`);
+}
+
 function sheet(html) {
   const s = $('#sheet'); s.innerHTML = `<div class="backdrop" data-act="closesheet"></div><div class="panel"><div class="sheet-bar"><div class="grab"></div><button class="sheet-x" data-act="closesheet" aria-label="Fermer">✕</button></div>${html}</div>`;
   s.classList.add('open'); document.body.classList.add('lock');
@@ -821,8 +854,9 @@ function workoutDetail(w, fresh) {
     ${prs.length ? `<div class="lbl sec" style="margin-top:16px">Records</div>${prs.map(p => `<div class="pr">${esc(p)}</div>`).join('')}` : ''}
     <div class="lbl sec" style="margin-top:16px">Coach IA</div><div id="review-box" data-w="${w.id}">${reviewHtml(w)}</div>
     <div class="lbl sec" style="margin-top:16px">Détail</div>
-    ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(exName(e.exId))}</b><div class="chips2">${e.sets.filter(s => s.done).map(s => `<span class="sc ${s.type === 'W' ? 'w' : ''}">${s.type === 'W' ? 'É ' : ''}${fmt(setW(s))}×${s.r}</span>`).join('')}</div>${e.note && e.note.trim() ? `<div class="note-txt">💬 ${esc(e.note.trim())}</div>` : ''}</div>`).join('')}
+    ${w.entries.map(e => `<div style="margin:10px 0"><b>${esc(exName(e.exId))}</b><div class="chips2">${e.sets.filter(s => s.done).map(s => `<span class="sc ${s.type === 'W' ? 'w' : ''}">${s.type === 'W' ? 'É ' : ''}${fmt(setW(s))}×${s.r}${s.rir != null ? ` <em>RIR ${s.rir}</em>` : ''}</span>`).join('')}</div>${e.note && e.note.trim() ? `<div class="note-txt">💬 ${esc(e.note.trim())}</div>` : ''}</div>`).join('')}
     <div class="row" style="margin-top:14px"><button class="btn" data-act="saveroutine" data-id="${w.id}">Enregistrer en routine</button>
+    <button class="btn" data-act="editw" data-id="${w.id}">Modifier</button>
     ${friendsAccepted().length ? `<button class="btn" data-act="send-open" data-id="${w.id}">Envoyer à un ami</button>` : ''}
     ${fresh ? '<button class="btn primary" data-act="closesheet">Fermer</button>' : '<button class="btn" data-act="delw" data-id="' + w.id + '" style="color:#ff8a4c">Supprimer</button>'}</div>`);
   if (fresh && cfg.apiKey && !w.review) runReview(w.id);
@@ -888,14 +922,15 @@ async function discardWorkout() {
   S.active = null; rest = null; drawRest(); unwake(); render(); schedulePush(true);
 }
 function toggleCheck(row) {
-  const e = S.active.entries.find(x => x.id === row.dataset.e), i = +row.dataset.i, s = e.sets[i];
+  const cw = W(); if (!cw) return;
+  const e = cw.entries.find(x => x.id === row.dataset.e), i = +row.dataset.i, s = e.sets[i];
   if (!s.done) {
     const ph = placeholders(e, i);
     if (s.r == null && ph.r !== '') s.r = ph.r;
     if (s.w == null && ph.w !== '') s.w = ph.w;
     if (!(s.r > 0)) { row.classList.add('bad'); setTimeout(() => row.classList.remove('bad'), 400); return; }
     if (s.w == null) s.w = 0;
-    s.done = true; if (s.type !== 'W') startRest(num(cfg.rest) > 0 ? Math.round(num(cfg.rest)) : 90);
+    s.done = true; if (s.type !== 'W' && !editing()) startRest(restFor(e.exId));
   } else s.done = false;
   persist(); render();
 }
@@ -1303,14 +1338,16 @@ function viewCalendar() {
 const REP_RANGE = { force: [3, 6], hypertrophie: [6, 12], seche: [8, 15], forme: [8, 12] };
 const stepFor = w => w < 10 ? 0.5 : w < 20 ? 1 : 2.5;
 function suggest(exId) {
-  const h = exHistory(exId, S.active ? S.active.startedAt : Infinity);
+  const t = W(); const h = exHistory(exId, t ? t.startedAt : Infinity);
   if (!h.length) return null;
   const last = h[h.length - 1], sets = last.sets; if (!sets.length) return null;
   const [lo, hi] = REP_RANGE[cfg.goal] || REP_RANGE.hypertrophie;
-  const w0 = setW(sets[0]), r0 = sets[0].r;
+  const w0 = setW(sets[0]), r0 = sets[0].r, rir = sets[0].rir;
   const stale = Date.now() - last.t > 70 * 86400000; // longue pause : on ne pousse pas
   const allTop = sets.every(s => s.r >= hi);
   if (stale) return { w: w0, r: Math.max(lo, Math.min(r0, hi)), why: 'reprise après une pause : refais la même chose' };
+  if (rir != null && rir >= 3 && w0 > 0) return { w: Math.round((w0 + stepFor(w0)) * 100) / 100, r: Math.max(lo, Math.min(r0, hi)), why: `il te restait ${rir} reps en réserve : monte la charge` };
+  if (rir === 0 && r0 < hi) return { w: w0, r: r0, why: 'série menée à l’échec : referme-la proprement avant de pousser' };
   if (allTop && w0 > 0) return { w: Math.round((w0 + stepFor(w0)) * 100) / 100, r: lo, why: `${hi} reps atteintes partout : monte la charge` };
   if (r0 >= hi) return { w: w0, r: hi, why: 'tiens ce niveau sur toutes les séries' };
   return { w: w0, r: Math.min(r0 + 1, hi), why: 'ajoute une répétition' };
@@ -1331,7 +1368,7 @@ function applySugg(eId) {
 document.addEventListener('click', async ev => {
   const t = ev.target.closest('[data-act]'); if (!t) return;
   unlockAudio();
-  const a = t.dataset.act, id = t.dataset.id, entry = () => S.active.entries.find(x => x.id === t.closest('.entry').dataset.e);
+  const a = t.dataset.act, id = t.dataset.id, entry = () => W().entries.find(x => x.id === t.closest('.entry').dataset.e);
   switch (a) {
     case 'tab': S.tab = t.dataset.t; S.sub = ''; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
     case 'sub': S.sub = t.dataset.s || ''; closeSheet(); render(); window.scrollTo(0, 0); break;
@@ -1383,14 +1420,22 @@ document.addEventListener('click', async ev => {
     case 'startroutine': { const r = S.routines.find(x => x.id === id); if (r) startWorkout(r.exIds.filter(ex), r.name); break; }
     case 'delroutine': if (confirm('Supprimer cette routine ?')) { S.routines = S.routines.filter(x => x.id !== id); del('routines', id); render(); } break;
     case 'newroutine': newRoutine(); break;
-    case 'addex': openPicker(ids => { S.active.entries.push(...makeEntries(ids)); persist(); render(); }); break;
-    case 'rmex': if (confirm('Retirer cet exercice de la séance ?')) { S.active.entries = S.active.entries.filter(x => x.id !== entry().id); persist(); render(); } break;
+    case 'addex': openPicker(ids => { W().entries.push(...makeEntries(ids)); persist(); render(); }); break;
+    case 'rmex': if (confirm('Retirer cet exercice de la séance ?')) { const cw = W(); cw.entries = cw.entries.filter(x => x.id !== entry().id); persist(); render(); } break;
     case 'addwarm': { const e = entry(); let k = 0; while (k < e.sets.length && e.sets[k].type === 'W') k++; e.sets.splice(k, 0, { w: null, r: null, done: false, type: 'W' }); persist(); render(); break; }
     case 'rmwarm': { const e = entry(); const k = e.sets.map(x => x.type).lastIndexOf('W'); if (k >= 0) { e.sets.splice(k, 1); persist(); render(); } break; }
     case 'addset': entry().sets.push(newSet()); persist(); render(); break;
     case 'rmset': { const e = entry(); if (e.sets.length > 1) { e.sets.pop(); persist(); render(); } break; }
-    case 'settype': { const row = t.closest('.set'), s = S.active.entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.type = s.type === 'W' ? 'N' : 'W'; persist(); render(); break; }
+    case 'settype': { const row = t.closest('.set'), s = W().entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.type = s.type === 'W' ? 'N' : 'W'; persist(); render(); break; }
     case 'check': toggleCheck(t.closest('.set')); break;
+    case 'rir': { const row = t.closest('.set'), s = W().entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.rir = s.rir == null ? 0 : s.rir >= 4 ? null : s.rir + 1; persist(); render(); break; }
+    case 'restex': openRestSheet(id); break;
+    case 'restset': { setRestFor(t.dataset.ex, +t.dataset.n || 0); closeSheet(); render(); break; }
+    case 'editw': {
+      if (S.active) { alert('Termine ou annule ta séance en cours avant de modifier une séance passée.'); break; }
+      editId = id; closeSheet(); S.tab = 'train'; S.sub = ''; render(); window.scrollTo(0, 0); break;
+    }
+    case 'editdone': { flush(); editId = null; render(); window.scrollTo(0, 0); break; }
     case 'finish': finishWorkout(); break;
     case 'cancel': if (confirm('Annuler et supprimer cette séance en cours ?')) discardWorkout(); break;
     case 'rest': if (rest) { rest.end += +t.dataset.d * 1000; rest.total = Math.max(rest.total, rest.end - Date.now()); if (rest.end <= Date.now()) rest.end = Date.now() + 1000; drawRest(); } break;
@@ -1430,17 +1475,29 @@ document.addEventListener('input', ev => {
   if (t.id === 'ex-q') { $('#ex-list').innerHTML = exBrowseList(t.value); return; }
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
   if (t.dataset.f === 'chat') { S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; return; }
-  if (t.dataset.f === 'wname' && S.active) { S.active.name = t.value; persist(); return; }
-  if (t.dataset.f === 'note' && S.active) { const en = S.active.entries.find(x => x.id === t.closest('.entry')?.dataset.e); if (en) { en.note = t.value.slice(0, 500); persist(); } return; }
-  if ((t.dataset.f === 'w' || t.dataset.f === 'r') && S.active) {
+  if (t.dataset.f === 'wname' && W()) { W().name = t.value; persist(); return; }
+  if (t.dataset.f === 'note' && W()) { const en = W().entries.find(x => x.id === t.closest('.entry')?.dataset.e); if (en) { en.note = t.value.slice(0, 500); persist(); } return; }
+  if ((t.dataset.f === 'w' || t.dataset.f === 'r') && W()) {
     const row = t.closest('.set'); if (!row) return;
-    const s = S.active.entries.find(x => x.id === row.dataset.e)?.sets[+row.dataset.i]; if (!s) return;
+    const s = W().entries.find(x => x.id === row.dataset.e)?.sets[+row.dataset.i]; if (!s) return;
     const v = num(t.value);
     if (t.dataset.f === 'w') s.w = v == null || v < 0 ? null : v; else s.r = v == null || v < 0 ? null : Math.round(v);
     persist();
   }
 });
 document.addEventListener('change', ev => {
+  const f = ev.target.dataset.f, w = W();
+  if (editing() && (f === 'wdate' || f === 'wdur') && w) {
+    if (f === 'wdate' && /^\d{4}-\d{2}-\d{2}$/.test(ev.target.value)) {
+      const o = new Date(w.startedAt), d = new Date(ev.target.value + 'T00:00:00');
+      d.setHours(o.getHours(), o.getMinutes(), 0, 0);
+      const dur0 = w.endedAt - w.startedAt; w.startedAt = d.getTime(); w.endedAt = w.startedAt + dur0;
+    } else if (f === 'wdur') {
+      const m = Math.min(600, Math.max(1, Math.round(num(ev.target.value) || 1)));
+      w.endedAt = w.startedAt + m * 60000; ev.target.value = m;
+    }
+    persist(); render(); return;
+  }
   const k = ev.target.dataset.cfg; if (!k) return;
   let v = ev.target.value;
   if (k === 'syncKey' || ev.target.type === 'checkbox') v = ev.target.checked;

@@ -74,6 +74,7 @@ h4{margin:14px 0 4px;font:700 12px var(--mono);letter-spacing:.14em;text-transfo
 .entry .eh small{display:block;color:var(--mute);font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
 .entry .eh .x{color:var(--mute);width:30px;height:30px}
 .sethead,.set{display:grid;grid-template-columns:38px 1fr 1fr 1fr 46px;gap:8px;align-items:center}
+.sethead.r6,.set.r6{grid-template-columns:34px .9fr 1fr 1fr 40px 44px;gap:6px}
 .sethead{font:600 10px var(--mono);letter-spacing:.16em;color:var(--mute);text-align:center;padding:0 0 4px}
 .set{padding:5px 0;border-radius:10px}
 .set.done{background:var(--redbg)}
@@ -329,3 +330,12 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .fi-l{margin:0;padding-left:18px}
 .fi-l li{font-size:14px;line-height:1.45;margin:3px 0}
 .fi-p{margin:0;font-size:14px;line-height:1.45}
+
+/* RIR, repos par exercice, mode modification */
+.rir{height:36px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);color:var(--mute);font:700 14px var(--mono)}
+.rir.on{color:var(--text);border-color:var(--red2)}
+.set.done .rir{background:transparent}
+.sc em{font-style:normal;color:var(--mute);font-size:11px}
+.ehrest{flex:none;height:28px;padding:0 9px;border-radius:14px;border:1px solid var(--line);background:var(--panel2);color:var(--mute);font:600 12px var(--mono)}
+.live.edit{align-items:center}
+.live.edit .lbl{color:var(--red)}
