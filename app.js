@@ -4,6 +4,7 @@
    Clé Gemini : uniquement sur l'appareil (localStorage).
    ===================================================================== */
 import * as backend from './backend.js';
+import { FICHES } from './fiches.js';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -429,6 +430,8 @@ ${lines.join('\n')}
 
 RECORDS : ${prsFor(w).join(' ; ') || 'aucun'}
 
+${ficheBlock(w.entries.map(e => e.exId))}
+
 FRÉQUENCE (4 dernières semaines, séances/semaine, séries par groupe) :
 ${wk.map(x => `- semaine du ${fmtDate(x.a)} : ${x.c} séance(s) — séries : ${fmtMuscles(x.mu)}`).join('\n')}
 
@@ -740,6 +743,25 @@ function viewSettings() {
   </section>`;
 }
 
+/* ---------- fiches techniques ---------- */
+const ficheHtml = id => {
+  const f = FICHES[id]; if (!f) return '';
+  const ul = a => `<ul class="fi-l">${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  return `<div class="fiche"><div class="lbl">Exécution</div>${ul(f.e)}
+    ${f.f ? `<div class="lbl">Erreurs fréquentes</div>${ul(f.f)}` : ''}
+    ${f.p ? `<div class="lbl">Précaution</div><p class="fi-p">${esc(f.p)}</p>` : ''}
+    ${f.v ? `<div class="lbl">Variantes</div><p class="fi-p">${esc(f.v)}</p>` : ''}</div>`;
+};
+// version compacte envoyée au coach IA (une ligne par exercice)
+const ficheLine = id => {
+  const f = FICHES[id]; if (!f) return null;
+  return `- ${exName(id)} : exécution — ${f.e.join(' ')}${f.f ? ` Erreurs — ${f.f.join(' ')}` : ''}${f.p ? ` Précaution — ${f.p}` : ''}${f.v ? ` Variantes — ${f.v}` : ''}`;
+};
+function ficheBlock(ids, max = 10) {
+  const l = [...new Set(ids)].slice(0, max).map(ficheLine).filter(Boolean);
+  return l.length ? `REPÈRES TECHNIQUES DE L'APP (à utiliser pour tes conseils d'exécution ; ne les recopie pas tels quels) :\n${l.join('\n')}` : '';
+}
+
 /* ---------- feuilles (sheets) ---------- */
 function sheet(html) {
   const s = $('#sheet'); s.innerHTML = `<div class="backdrop" data-act="closesheet"></div><div class="panel"><div class="sheet-bar"><div class="grab"></div><button class="sheet-x" data-act="closesheet" aria-label="Fermer">✕</button></div>${html}</div>`;
@@ -755,6 +777,7 @@ function exView(id) {
     <h3>${esc(e.name)}</h3><div class="lb-m">${esc(e.muscle)}</div>
     ${exImgs(e).length ? `<div class="lb-imgs">${exImgs(e).map(u => `<img src="${u}" alt="${esc(e.name)}">`).join('')}</div>` : ''}
     ${muscleMap(e)}
+    ${ficheHtml(e.id)}
     <small class="note">Photos à titre d'exemple (base libre free-exercise-db) : le matériel de ta salle peut différer légèrement. Muscles : principal en rouge vif, secondaires en rouge foncé.</small></div>`;
   document.body.appendChild(d);
 }
@@ -827,6 +850,7 @@ function exDetail(id) {
   sheet(`<h3>${esc(exName(id))}</h3>
     ${exImgs(ex(id)).length ? `<div class="lb-imgs">${exImgs(ex(id)).map(u => `<img src="${u}" alt="" loading="lazy">`).join('')}</div>` : ''}
     ${muscleMap(ex(id))}
+    ${ficheHtml(id)}
     <div class="stats"><div class="stat"><b>${fmt(maxW)} kg</b><span>Charge max</span></div><div class="stat"><b>${bestE > 0 ? fmt(Math.round(bestE * 10) / 10) + ' kg' : '–'}</b><span>Meilleur e1RM</span></div></div>
     <div class="lbl sec" style="margin-top:16px">Progression (${unit})</div>${lineChart(pts, unit)}
     <small class="note">e1RM = charge maximale estimée sur 1 répétition (formule d'Epley). Séries de travail uniquement.</small>
@@ -1512,7 +1536,8 @@ function chatContext() {
     }).filter(Boolean).join(' ; ')).join('\n'));
   } else parts.push('ENTRAÎNEMENT : aucune séance enregistrée pour le moment.');
   parts.push(bodyContext());
-  return parts.filter(Boolean).join('\n\n').slice(0, 9000);
+  const fb = ficheBlock(fw.slice(-3).flatMap(w => w.entries.map(e => e.exId)), 8);
+  return parts.filter(Boolean).join('\n\n').slice(0, 9000) + (fb ? '\n\n' + fb : '');
 }
 
 function parseMemos(t) {
