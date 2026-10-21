@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v19';
+const VERSION = 'v20';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -171,8 +171,8 @@ const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
 // Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}' };
-const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt'];
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}', autoRev: true, revWk: '', revTxt: '' };
+const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt', 'autoRev', 'revWk', 'revTxt'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
 const storeCfg = () => { try { localStorage.setItem('lift.cfg', JSON.stringify(cfg)); } catch (e) { } };
@@ -193,7 +193,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
   chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight', sub: '', pm: 'dur',
-  prs: [], cal: { z: 'm', ref: Date.now() },
+  prs: [], cal: { z: 'm', ref: Date.now() }, volZ: 7,
   friends: [], shared: {}, sharedUnsubs: {}, inbox: [], friend: '', fr: { q: '', results: [], msg: '', busy: false },
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
@@ -294,7 +294,7 @@ function startSession(user) {
   S.user = user; S.loading = true; S.syncErr = ''; S.tab = 'train'; S.sub = '';
   S.auth = { mode: 'login', err: '', info: '', busy: false, email: '' }; render();
   const seen = new Set();
-  const ready = k => { seen.add(k); if (['w', 'r', 'e', 'p'].every(k => seen.has(k))) mergeDuplicates(); if (seen.size >= 4 && S.loading) { S.loading = false; render(); } };
+  const ready = k => { seen.add(k); if (['w', 'r', 'e', 'p'].every(k => seen.has(k))) mergeDuplicates(); if (['w', 's'].every(k => seen.has(k))) setTimeout(maybeWeekReview, 2000); if (seen.size >= 4 && S.loading) { S.loading = false; render(); } };
   setTimeout(() => { if (S.loading) { S.loading = false; render(); } }, 7000);
   unsubs = [
     backend.watch(user.uid, 'workouts', (list, m) => { if (list) applyWorkouts(list); else syncError(m && m.error); ready('w'); }),
@@ -456,6 +456,20 @@ function exHistory(exId, beforeTs = Infinity) {
 }
 const prevFor = exId => { const t = W(); const h = exHistory(exId, t ? t.startedAt : Infinity); return h[h.length - 1] || null; };
 
+/* ---------- plateau (stagnation) ----------
+   Plateau : au moins 4 séances sur l'exercice, et les 3 dernières n'ont pas
+   amélioré le meilleur des séances précédentes (tolérance de 0,5 %).
+   Mesure = e1RM estimé, ou nombre de répétitions pour les exercices sans charge. */
+function stagFor(exId) {
+  const h = exHistory(exId);
+  if (h.length < 4) return null;
+  const ms = h.map(x => metric(x.best)), peak = Math.max(...ms.slice(0, -3));
+  if (!(peak > 0) || Math.max(...ms.slice(-3)) > peak * 1.005) return null;
+  return { since: h[h.length - 3].t, peak, last: ms[ms.length - 1], n: h.length };
+}
+const STAG_TIP = "Trois séances sans nouveau record. Trois pistes : atteindre le haut de la fourchette de répétitions sur toutes les séries avant d'ajouter du poids ; faire une semaine allégée (environ −10 % de charge) puis reprendre ; ou passer 3 à 4 semaines sur une variante proche.";
+const bestSetOf = x => x.sets.reduce((a, b) => e1rm(setW(b), b.r) > e1rm(setW(a), a.r) ? b : a);
+
 function muscleSets(from, to) {
   const o = {};
   for (const w of finished()) {
@@ -600,8 +614,7 @@ function analysisPrompt() {
   const rows = ids.map(id => ({ id, h: exHistory(id).filter(x => x.t >= since) })).filter(r => r.h.length >= 2)
     .sort((a, b) => b.h.length - a.h.length).slice(0, 14);
   const lines = rows.map(r => {
-    const h = r.h.slice(-6), ms = h.map(x => metric(x.best));
-    const stag = h.length >= 3 && Math.max(...ms.slice(-3)) <= Math.max(...ms.slice(0, -3).concat([0])) * 1.005;
+    const h = r.h.slice(-6), stag = !!stagFor(r.id);
     return `- ${exName(r.id)} [${ex(r.id)?.muscle || '?'}] (${r.h.length} séances) : ` + h.map(x => `${fmtDate(x.t)} ${setTxt(x.sets.reduce((a, b) => e1rm(setW(b), b.r) > e1rm(setW(a), a.r) ? b : a), r.id, x.t)}`).join(' → ') + (stag ? ' | PLATEAU possible' : '');
   });
   const odd = finished().filter(w => w.startedAt >= since && durOdd(w)).length;
@@ -850,20 +863,104 @@ function viewHistory() {
   return `<div class="lbl" style="margin-bottom:10px">${fw.length} séance${fw.length > 1 ? 's' : ''}</div>${fw.map(workoutCard).join('')}`;
 }
 
+/* Séries de travail par muscle, sur 7 jours ou en moyenne hebdomadaire sur
+   4 semaines, comparées à la période précédente. Les deux repères sur la barre
+   marquent 10 et 20 séries par semaine. */
+function volCard() {
+  const z = S.volZ === 28 ? 28 : 7, now = Date.now();
+  const cur = muscleSets(addDays(now, -z), now + 1), prv = muscleSets(addDays(now, -2 * z), addDays(now, -z));
+  const per = n => z === 28 ? Math.round((n || 0) / 4) : (n || 0);
+  const mx = Math.max(22, ...MUSCLES.map(m => per(cur[m])));
+  const pct = v => Math.min(100, v / mx * 100);
+  return `<div class="lbl sec">Séries de travail par muscle</div>
+  <div class="chips">${[[7, '7 derniers jours'], [28, 'moyenne sur 4 semaines']].map(([n, l]) => `<button class="chip ${z === n ? 'on' : ''}" data-act="volz" data-n="${n}">${l}</button>`).join('')}</div>
+  <section class="card bars">
+    ${MUSCLES.map(m => { const v = per(cur[m]), d = v - per(prv[m]);
+      return `<div class="b"><span>${m}</span>
+      <div class="track"><i style="width:${pct(v)}%"></i><u style="left:${pct(10)}%"></u><u style="left:${pct(20)}%"></u></div>
+      <span class="n">${v}${d ? `<em class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</em>` : ''}</span></div>`; }).join('')}
+    <small class="note">${z === 28 ? 'Moyenne par semaine sur les 4 dernières semaines' : 'Total des 7 derniers jours'}, comparée à la période précédente. Les deux traits marquent 10 et 20 séries par semaine, la fourchette habituellement citée pour faire progresser un muscle.</small>
+  </section>`;
+}
+
+/* ---------- bilan hebdomadaire automatique ----------
+   Généré une fois par semaine, à la première ouverture de l'app à partir du
+   dimanche 18 h. Sans notifications (plan Firebase gratuit), il ne peut pas
+   arriver tout seul quand l'app est fermée. */
+const wkKey = ts => new Date(mondayOf(ts)).toISOString().slice(0, 10);
+const loadRev = () => { try { return JSON.parse(cfg.revTxt || 'null'); } catch (e) { return null; } };
+
+function weekRevCard() {
+  const r = loadRev(); if (!r || !r.text) return '';
+  const a = mondayOf(new Date(r.week + 'T12:00:00').getTime());
+  return `<div class="lbl" style="margin-bottom:10px">Bilan de la semaine du ${fmtDate(a)}</div>
+  <section class="card"><div class="review">${md(r.text)}<div class="meta">généré le ${new Date(r.ts).toLocaleDateString('fr-FR')} · ${esc(r.model)}</div></div></section>`;
+}
+
+function weekRevPrompt(a, b) {
+  const ws = finished().filter(w => w.startedAt >= a && w.startedAt < b);
+  const cur = muscleSets(a, b), prev = [1, 2, 3].map(k => muscleSets(addDays(a, -7 * k), addDays(b, -7 * k)));
+  const vol = MUSCLES.map(m => {
+    const c = cur[m] || 0, p = Math.round(prev.reduce((s, o) => s + (o[m] || 0), 0) / 3);
+    return (c || p) ? `${m} ${c} (moyenne des 3 semaines précédentes : ${p})` : null;
+  }).filter(Boolean).join(', ');
+  const recs = [], plats = [];
+  for (const id of [...new Set(ws.flatMap(w => w.entries.map(e => e.exId)))]) {
+    const h = exHistory(id); if (h.length < 2) continue;
+    const ms = h.map(x => metric(x.best)), last = h[h.length - 1];
+    if (ms[ms.length - 1] > Math.max(...ms.slice(0, -1)) * 1.005) recs.push(`${exName(id)} → ${setTxt(bestSetOf(last), id, last.t)}`);
+    if (stagFor(id)) plats.push(exName(id));
+  }
+  return `${profileLine()}
+
+${historyLine()}
+
+SEMAINE DU ${fmtDate(a)} AU ${fmtDate(addDays(b, -1))} :
+- séances réalisées : ${ws.length} (objectif : ${cfg.perWeek} par semaine)
+- séries de travail par muscle : ${vol || 'aucune'}
+- nouveaux records cette semaine : ${recs.join(' ; ') || 'aucun'}
+- exercices en plateau (3 séances sans record) : ${plats.join(', ') || 'aucun'}
+${notesBlock(a)}
+Rédige le bilan de cette semaine, en t'adressant directement à l'utilisateur :
+## La semaine en bref
+## Ce qui a bien marché
+## À surveiller
+## La semaine qui vient (2 ou 3 actions précises)
+Maximum 250 mots. N'avance aucun chiffre qui ne figure pas dans les données ci-dessus.`;
+}
+
+let revTried = false;
+async function maybeWeekReview() {
+  if (revTried || !cfg.autoRev || !cfg.apiKey || !S.user) return;
+  revTried = true;
+  const d = new Date(), ms = mondayOf(d.getTime());
+  // La semaine n'est considérée comme terminée que le dimanche à partir de 18 h.
+  const a = (d.getDay() === 0 && d.getHours() >= 18) ? ms : addDays(ms, -7), b = addDays(a, 7);
+  const key = wkKey(a);
+  if (cfg.revWk === key) return;
+  if (!finished().some(w => w.startedAt >= a && w.startedAt < b)) { cfg.revWk = key; saveCfg(); return; }
+  try {
+    const text = await gemini(weekRevPrompt(a, b));
+    cfg.revTxt = JSON.stringify({ text, ts: Date.now(), week: key, model: cfg.model });
+    cfg.revWk = key; saveCfg();
+    if (S.sub === 'progress') render();
+    toastMsg('Ton bilan de la semaine est prêt.', 'gorev');
+  } catch (e) { revTried = false; /* on retentera à la prochaine ouverture */ }
+}
+
 function viewProgress() {
   const fw = finished(), a = loadAnalysis();
   const ids = [...new Set(fw.flatMap(w => w.entries.map(e => e.exId)))];
   const rows = ids.map(id => ({ id, h: exHistory(id) })).filter(r => r.h.length).sort((a, b) => b.h[b.h.length - 1].t - a.h[a.h.length - 1].t);
-  const now = Date.now(), mu = muscleSets(addDays(now, -7), now + 1), mx = Math.max(20, ...Object.values(mu));
-  return `<div class="lbl" style="margin-bottom:10px">Analyse de progression</div>
+  return `${weekRevCard()}
+  <div class="lbl sec">Analyse de progression</div>
   <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Gemini analyse tes 6 dernières semaines (régularité, progression, volume par muscle) et propose un plan pour les 2 prochaines.</p>
   <button class="btn primary" data-act="analyze" id="anbtn">Analyser ma progression</button><div id="anout">${a ? `<div class="review">${md(a.text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>` : ''}</div></section>
-  <div class="lbl sec">Séries de travail · 7 derniers jours</div>
-  <section class="card bars">${MUSCLES.map(m => `<div class="b"><span>${m}</span><div class="track"><i style="width:${(mu[m] || 0) / mx * 100}%"></i></div><span class="n">${mu[m] || 0}</span></div>`).join('')}</section>
+  ${volCard()}
   <div class="lbl sec">Exercices</div>
   ${rows.map(r => {
     const last = r.h[r.h.length - 1], ser = r.h.slice(-8).map(x => metric(x.best)), d = ser.length > 1 && ser[0] > 0 ? (ser[ser.length - 1] / ser[0] - 1) * 100 : null;
-    return `<button class="card prow wk" data-act="exdetail" data-id="${r.id}"><div class="meta"><b>${esc(exName(r.id))}</b><small>${esc(ex(r.id)?.muscle || '')} · ${r.h.length} séance${r.h.length > 1 ? 's' : ''}</small></div>
+    return `<button class="card prow wk" data-act="exdetail" data-id="${r.id}"><div class="meta"><b>${esc(exName(r.id))}</b><small>${esc(ex(r.id)?.muscle || '')} · ${r.h.length} séance${r.h.length > 1 ? 's' : ''}${stagFor(r.id) ? ' · <span class="plat">plateau</span>' : ''}</small></div>
       ${spark(ser)}<div class="val">${fmt(last.best.w)} × ${last.best.r}<small class="${d == null ? '' : d >= 0 ? 'up' : 'down'}">${d == null ? '' : (d >= 0 ? '+' : '') + Math.round(d) + ' %'}</small></div></button>`;
   }).join('') || '<p class="empty">Les courbes de progression apparaîtront après ta première séance.</p>'}`;
 }
@@ -898,6 +995,7 @@ function viewSettings() {
     <label class="l">Modèle</label>
     <input class="field" data-cfg="model" list="models" autocapitalize="off" spellcheck="false" value="${esc(cfg.model)}">
     <datalist id="models"><option value="gemini-3.5-flash"><option value="gemini-3.1-flash-lite"><option value="gemini-2.5-flash"><option value="gemini-2.5-flash-lite"></datalist>
+    <label class="l" style="display:flex;gap:10px;align-items:flex-start;text-transform:none;letter-spacing:0;font-size:14px"><input type="checkbox" data-cfg="autoRev" ${cfg.autoRev ? 'checked' : ''} style="margin-top:3px"><span>Bilan hebdomadaire automatique<br><small class="note">Le coach rédige le bilan de ta semaine à la première ouverture de l'app à partir du dimanche 18 h, puis l'affiche dans Statistiques. Une requête Gemini par semaine. Sans notifications sur le plan gratuit, il ne peut pas arriver quand l'app est fermée.</small></span></label>
     <button class="btn" data-act="testkey">Tester la connexion</button><div id="keystatus" class="muted" style="font-size:14px"></div>
   </section>
 
@@ -1015,6 +1113,14 @@ function undoable(msg, fn) {
   undoT = setTimeout(() => { el.classList.remove('on'); undoFn = null; }, 7000);
 }
 let undoFn = null;
+// Bandeau simple, sans annulation : une information et un bouton d'action.
+function toastMsg(msg, act) {
+  const el = $('#toast'); if (!el) return;
+  clearTimeout(undoT); undoFn = null;
+  el.innerHTML = `<span>${esc(msg)}</span><button data-act="${act || 'toastx'}">${act ? 'Voir' : 'OK'}</button>`;
+  el.classList.add('on');
+  undoT = setTimeout(() => el.classList.remove('on'), 12000);
+}
 function doUndo() { const f = undoFn; undoFn = null; clearTimeout(undoT); $('#toast').classList.remove('on'); if (f) f(); }
 
 /* ---------- feuilles (sheets) ---------- */
@@ -1118,6 +1224,7 @@ function exDetail(id) {
     ${muscleMap(ex(id))}
     ${ficheHtml(id)}
     <div class="stats"><div class="stat"><b>${fmt(maxW)} kg</b><span>Charge max</span></div><div class="stat"><b>${bestE > 0 ? fmt(Math.round(bestE * 10) / 10) + ' kg' : '–'}</b><span>Meilleur e1RM</span></div></div>
+    ${(() => { const st = stagFor(id); return st ? `<div class="tip plateau"><span>⚠︎</span><span><b>Plateau depuis le ${fmtDate(st.since)}.</b> ${STAG_TIP}</span></div>` : ''; })()}
     <div class="lbl sec" style="margin-top:16px">Progression (${unit})</div>${lineChart(pts, unit)}
     <small class="note">e1RM = charge maximale estimée sur 1 répétition (formule d'Epley). Séries de travail uniquement.</small>
     <div class="lbl sec" style="margin-top:12px">Dernières séances</div>
@@ -1641,7 +1748,7 @@ function suggest(exId) {
 function suggHtml(e) {
   const s = suggest(e.exId); if (!s) return '';
   return `<button class="sugg" data-act="sugg-apply" data-e="${e.id}" title="${esc(s.why)}">
-    <span class="sg-l">Objectif</span><b>${s.w > 0 ? fmt(s.w) + ' kg' : 'PDC'} × ${s.r}</b><small>${esc(s.why)} · touche pour remplir</small></button>`;
+    <span class="sg-l">Objectif</span><b>${s.w > 0 ? fmt(s.w) + ' kg' : 'PDC'} × ${s.r}</b><small>${esc(s.why)} · touche pour remplir</small>${stagFor(e.exId) ? '<small class="plat">plateau : 3 séances sans record</small>' : ''}</button>`;
 }
 function applySugg(eId) {
   const e = S.active.entries.find(x => x.id === eId), s = e && suggest(e.exId); if (!s) return;
@@ -1762,6 +1869,9 @@ document.addEventListener('click', async ev => {
     case 'perweek': cfg.perWeek = +t.dataset.n; saveCfg(); render(); break;
     case 'analyze': analyze(); break;
     case 'testkey': testKey(); break;
+    case 'volz': S.volZ = +t.dataset.n; render(); break;
+    case 'toastx': $('#toast').classList.remove('on'); break;
+    case 'gorev': $('#toast').classList.remove('on'); S.sub = 'progress'; render(); window.scrollTo(0, 0); break;
     case 'forceupdate': await forceUpdate(); break;
     case 'swreload': location.reload(); break;
     case 'export': exportData(); break;

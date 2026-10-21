@@ -360,3 +360,17 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .vrow:last-of-type{border-bottom:0;margin-bottom:6px}
 .vrow span{color:var(--mute)}
 .vrow b{font:600 13px var(--mono);letter-spacing:.08em}
+
+/* volume par muscle : repères 10 / 20 séries et écart avec la période précédente */
+.bars .b{grid-template-columns:96px 1fr auto}
+.bars .track{position:relative}
+.bars .track u{position:absolute;top:-3px;width:1px;height:14px;background:var(--mute);opacity:.5}
+.bars .n{min-width:28px}
+.bars .n em{font:600 11px var(--mono);font-style:normal;margin-left:5px}
+.bars .note{display:block;margin-top:10px}
+
+/* plateau */
+.plat{color:#ffb45c;font-weight:600}
+.sugg .plat{display:block;margin-top:2px}
+.tip.plateau{background:rgba(255,180,92,.09);color:#e8c89c}
+.tip.plateau b{color:#ffb45c}
