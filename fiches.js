@@ -477,5 +477,165 @@ export const FICHES = {
     e: ['Allongé, genoux fléchis, mains sur la poitrine ou les tempes sans tirer sur la nuque.', 'Enroule le haut du dos en soufflant.', 'Descente lente sans relâcher complètement.'],
     f: ['Tirer sur la nuque avec les mains.', 'Monter le buste entier au lieu d’enrouler.'],
     v: 'Amplitude courte par nature : cherche la contraction, pas le nombre de répétitions.'
+  },
+
+  /* ---------- variantes et unilatéral ---------- */
+  x87: {
+    e: ['Prise supination, mains à largeur d’épaules.', 'Abaisse les omoplates avant de tirer avec les bras.', 'Menton au-dessus de la barre, descente contrôlée sans relâcher en bas.'],
+    f: ['Balancement du bassin pour se lancer.', 'Coudes qui partent vers l’avant.'],
+    v: 'La supination raccourcit le bras de levier et fait beaucoup plus travailler le biceps que la prise pronation.'
+  },
+  x88: {
+    e: ['Poignées parallèles, paumes face à face.', 'Tire en amenant la poitrine vers les mains.', 'Descente complète, épaules actives en bas.'],
+    f: ['Amplitude écourtée en haut.'],
+    p: 'C’est la prise la plus confortable pour l’épaule et le coude : bonne porte d’entrée si la pronation te gêne.',
+    v: 'Équilibre entre grand dorsal, brachial et brachio-radial.'
+  },
+  x89: {
+    e: ['Poignée simple, assis de biais ou à genoux face à la poulie.', 'Tire le coude vers la hanche en abaissant l’omoplate.', 'Laisse l’épaule monter en fin de remontée pour étirer le dos.'],
+    f: ['Tourner le buste pour aider.', 'Tirer uniquement avec le bras.'],
+    v: 'Le travail à un bras augmente l’amplitude et permet de corriger un retard d’un côté.'
+  },
+  x90: {
+    e: ['Une poignée, buste droit et immobile.', 'Tire le coude vers l’arrière, le long du corps.', 'Retour complet, en laissant l’omoplate s’avancer.'],
+    f: ['Rotation du buste à chaque répétition.'],
+    v: 'Permet de sentir l’omoplate travailler, souvent noyée dans la version à deux bras.'
+  },
+  x91: {
+    e: ['Barre au sol à chaque répétition, buste proche de l’horizontale.', 'Tire explosivement vers le nombril, dos gainé et neutre.', 'Repose la barre complètement avant la répétition suivante.'],
+    f: ['Dos arrondi au décollage.', 'Enchaîner sans reposer la barre, ce qui en fait un rowing classique.'],
+    p: 'Très exigeant pour les lombaires : garde une charge que tu contrôles buste immobile.',
+    v: 'L’arrêt au sol supprime l’élan et oblige à repartir de zéro à chaque répétition.'
+  },
+  x92: {
+    e: ['Un haltère dans chaque main, bras tendus le long du corps.', 'Hausse les épaules droit vers le haut, temps d’arrêt en haut.', 'Descente contrôlée jusqu’à l’étirement.'],
+    f: ['Rotations d’épaules.', 'Plier les coudes pour tricher.'],
+    v: 'Les haltères laissent les bras le long du corps, position plus naturelle que la barre devant les cuisses.'
+  },
+  x93: {
+    e: ['Buste penché vers l’avant, poulie basse, câble passant devant le corps.', 'Écarte le bras vers l’extérieur et l’arrière, coude à peine fléchi.', 'Retour lent sans relâcher la tension.'],
+    f: ['Se redresser pendant le mouvement.', 'Charge trop lourde qui fait intervenir le trapèze.'],
+    v: 'Mélange d’élévation latérale et d’oiseau : touche le faisceau moyen et le faisceau postérieur.'
+  },
+  x94: {
+    e: ['Un seul haltère, l’autre main tient un appui pour stabiliser le buste.', 'Monte jusqu’à l’horizontale, coude légèrement fléchi.', 'Descente lente, sans balancement.'],
+    f: ['Pencher le buste du côté opposé pour aider.'],
+    v: 'L’appui supprime la triche du buste : charge plus faible, mais travail plus propre.'
+  },
+  x95: {
+    e: ['Assis ou debout, un seul haltère, abdominaux gainés.', 'Poussée verticale, coude légèrement en avant du plan du corps.', 'Descente jusqu’au niveau du menton.'],
+    f: ['Cambrure lombaire pour compenser.', 'Inclinaison du buste du côté opposé.'],
+    v: 'Oblige le tronc à résister à la rotation : gainage en plus du travail d’épaule.'
+  },
+  x96: {
+    e: ['Coude collé au corps, fléchi à 90°, poulie à hauteur du coude.', 'Fais tourner l’avant-bras vers l’extérieur sans bouger le coude.', 'Retour lent.'],
+    f: ['Décoller le coude du corps.', 'Charge excessive, qui transforme le geste en tirage.'],
+    p: 'Exercice de prévention : reste très léger, la coiffe des rotateurs est un petit muscle.',
+    v: 'Travaille les rotateurs externes, le contrepoids de tout le travail de poussée.'
+  },
+  x97: {
+    e: ['Une poignée à hauteur du visage, tirage vers la tempe.', 'Finis en rotation externe, coude à hauteur d’épaule.', 'Retour contrôlé.'],
+    f: ['Tirer vers la poitrine.'],
+    v: 'Même cible que le face pull classique, avec plus d’amplitude par bras.'
+  },
+  x98: {
+    e: ['Poulie basse, coude fixe le long du corps.', 'Monte en contractant, redescends en résistant.', 'Buste immobile.'],
+    f: ['Reculer pour aider la montée.', 'Coude qui avance.'],
+    v: 'Tension constante sur toute l’amplitude. À deux poulies en même temps, un bras de chaque côté, la charge affichée est celle d’un seul côté.'
+  },
+  x99: {
+    e: ['Bras calés sur le pupitre, poulie basse devant.', 'Montée complète sans décoller les coudes.', 'Descente lente, extension presque complète en bas.'],
+    f: ['Relâcher d’un coup en bas, le coude en position vulnérable.'],
+    p: 'Ne lâche jamais la charge en bas : laisse redescendre en résistant.',
+    v: 'La poulie garde de la tension en haut, là où la barre n’en donne plus.'
+  },
+  x100: {
+    e: ['Poitrine calée sur un banc incliné, bras pendants à la verticale.', 'Monte les haltères sans bouger les coudes.', 'Contraction marquée en haut, descente lente.'],
+    f: ['Décoller la poitrine du banc.'],
+    v: 'Le bras à la verticale met la tension maximale en position contractée.'
+  },
+  x101: {
+    e: ['Une poignée, coude serré le long du corps.', 'Extension complète, petite rotation du poignet en fin de mouvement.', 'Remontée contrôlée jusqu’à l’angle droit.'],
+    f: ['Coude qui s’écarte ou avance.', 'Buste qui pousse sur la charge.'],
+    v: 'Permet de corriger un déséquilibre entre les deux bras, fréquent sur les triceps.'
+  },
+  x102: {
+    e: ['Haltère au-dessus de la tête, un seul bras, coude dirigé vers le haut.', 'Descends derrière la nuque jusqu’à l’étirement.', 'Extension complète sans verrouiller sèchement.'],
+    f: ['Coude qui part sur le côté.', 'Cambrure lombaire.'],
+    v: 'Bras au-dessus de la tête : c’est la position qui étire le plus le chef long du triceps.'
+  },
+  x103: {
+    e: ['Une seule jambe, axe de la machine aligné avec le genou.', 'Extension complète, temps d’arrêt en haut.', 'Retour contrôlé sans laisser la charge chuter.'],
+    f: ['Décoller le bassin du siège.'],
+    v: 'Révèle les écarts entre les deux jambes que la version bilatérale masque.'
+  },
+  x104: {
+    e: ['Un pied au centre de la plateforme, bassin bien plaqué.', 'Descends jusqu’à 90° au genou, sans décoller le bas du dos.', 'Poussée sans verrouiller le genou.'],
+    f: ['Bassin qui s’enroule en bas.', 'Pied trop haut ou trop bas sur la plateforme.'],
+    p: 'Charge nettement plus légère qu’à deux jambes : commence prudemment.',
+    v: 'Bonne alternative au squat bulgare quand l’équilibre ou le dos limite.'
+  },
+  x105: {
+    e: ['Banc ou caisse à hauteur de genou, pied entier posé dessus.', 'Pousse avec la jambe du dessus, sans impulsion de la jambe au sol.', 'Descente contrôlée, le pied arrière effleure le sol.'],
+    f: ['Prendre appui sur la jambe restée au sol.', 'Marche trop haute, qui fait basculer le buste.'],
+    v: 'Très transférable aux escaliers et à la course. Plus la marche est haute, plus les fessiers travaillent.'
+  },
+  x106: {
+    e: ['Pas vers l’arrière, genou arrière vers le sol.', 'Buste droit, poids sur le talon avant.', 'Reviens en poussant sur la jambe avant.'],
+    f: ['Pas trop court, genou avant qui part loin devant.'],
+    v: 'Moins traumatisant pour le genou que la fente avant, car il n’y a pas de freinage à l’impact.'
+  },
+  x107: {
+    e: ['Une seule jambe, bassin à plat sur le banc.', 'Fléchis jusqu’à la contraction complète.', 'Retour lent sans extension sèche.'],
+    f: ['Décoller le bassin en fin de flexion.'],
+    v: 'Permet de rattraper un côté plus faible, fréquent après une blessure.'
+  },
+  x108: {
+    e: ['En appui sur une jambe, haltère dans la main opposée.', 'Penche le buste en poussant la hanche en arrière, jambe libre tendue derrière.', 'Dos neutre, remonte en contractant le fessier.'],
+    f: ['Dos arrondi.', 'Hanche qui s’ouvre sur le côté.'],
+    p: 'Cherche d’abord l’équilibre à vide : la technique prime sur la charge.',
+    v: 'Travaille les ischio-jambiers, le fessier et la stabilité de la hanche en même temps.'
+  },
+  x109: {
+    e: ['Omoplates sur un banc, une seule jambe au sol, tibia vertical en haut.', 'Monte jusqu’à l’alignement épaules-hanches-genou, menton rentré.', 'Garde le bassin horizontal, sans rotation.'],
+    f: ['Bassin qui s’affaisse du côté libre.', 'Hyperextension lombaire en haut.'],
+    v: 'Oblige le moyen fessier à stabiliser le bassin en plus du travail du grand fessier.'
+  },
+  x110: {
+    e: ['Sangle à la cheville, poulie basse, appui sur l’autre jambe.', 'Écarte la jambe sur le côté sans pencher le buste.', 'Retour contrôlé.'],
+    f: ['Se pencher du côté opposé pour gagner de l’amplitude.'],
+    v: 'Tension constante, contrairement à la machine qui en perd en fin de course.'
+  },
+  x111: {
+    e: ['Dos plaqué, genoux alignés avec l’axe de la machine.', 'Resserre les cuisses en contrôlant, temps d’arrêt en fin de course.', 'Retour lent sans laisser claquer la charge.'],
+    f: ['À-coups en fin d’ouverture.'],
+    p: 'Ouvre progressivement l’amplitude : les adducteurs se claquent facilement à froid.',
+    v: 'Utile en complément des fentes et du squat, où les adducteurs travaillent déjà.'
+  },
+  x112: {
+    e: ['Un seul avant-pied sur la marche, l’autre jambe relevée.', 'Descends jusqu’à l’étirement complet, monte jusqu’à l’extension maximale.', 'Temps d’arrêt en haut et en bas, sans rebond.'],
+    f: ['Rebondir sur le tendon d’Achille.'],
+    v: 'Permet de charger lourd au poids du corps seul, et de rattraper un mollet en retard.'
+  },
+  x113: {
+    e: ['Pieds largement écartés, pointes ouvertes, barre entre les jambes.', 'Hanches plus basses qu’au conventionnel, buste plus vertical.', 'Pousse dans le sol en écartant les genoux, barre contre les jambes.'],
+    f: ['Genoux qui rentrent.', 'Bassin qui monte avant les épaules.'],
+    p: 'Même prudence qu’au soulevé classique : arrête la série dès que le dos s’arrondit.',
+    v: 'Sollicite davantage les quadriceps, les adducteurs et les fessiers, et moins les lombaires.'
+  },
+  x114: {
+    e: ['Appui sur les avant-bras et les pointes de pieds, corps en ligne.', 'Fessiers et abdominaux contractés, bassin légèrement rétroversé.', 'Respire normalement, sans bloquer.'],
+    f: ['Bassin qui s’affaisse ou qui remonte.', 'Tenir longtemps en position dégradée plutôt que court et propre.'],
+    v: 'Travail anti-extension : la durée compte moins que la qualité de l’alignement.'
+  },
+  x115: {
+    e: ['Appui sur un avant-bras et le bord du pied, corps en ligne vu de face.', 'Monte la hanche jusqu’à l’alignement et tiens.', 'Épaule à l’aplomb du coude.'],
+    f: ['Hanche qui descend.', 'Buste qui bascule vers l’avant.'],
+    v: 'Travail anti-inclinaison : cible les obliques et le carré des lombes.'
+  },
+  x116: {
+    e: ['Allongé, genoux fléchis, mains aux tempes sans tirer sur la nuque.', 'Enroule en amenant l’épaule vers la hanche opposée.', 'Descente lente, alterne les côtés.'],
+    f: ['Tirer sur la nuque.', 'Mouvement rapide sans contraction.'],
+    v: 'Cible les obliques. Évite de charger lourd si tu ne veux pas épaissir la taille.'
   }
 };
