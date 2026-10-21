@@ -6,6 +6,10 @@
 import * as backend from './backend.js';
 import { FICHES } from './fiches.js';
 
+/* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
+   (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
+const VERSION = 'v18';
+
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -896,7 +900,85 @@ function viewSettings() {
   <section class="card">
     <small class="note">Tes séances sont enregistrées dans ton compte et synchronisées en temps réel. L'export crée une copie de sécurité (la clé API n'y est jamais incluse). L'import ajoute une sauvegarde à ton compte, par exemple celle de l'ancienne version de l'app.</small>
     <div class="row"><button class="btn" data-act="export">Exporter</button><button class="btn" data-act="import">Importer</button></div>
+  </section>
+
+  ${versionCard()}`;
+}
+
+/* ---------- version et mise à jour ---------- */
+function versionCard() {
+  const swv = SW.cache ? SW.cache.replace(/^lift-cloud-/, '') : null;
+  const mismatch = swv && swv !== VERSION;
+  return `<div class="lbl sec">Version</div>
+  <section class="card">
+    <div class="vrow"><span>Application</span><b>${VERSION}</b></div>
+    <div class="vrow"><span>Cache hors ligne</span><b class="${mismatch ? 'down' : ''}">${swv ? esc(swv) : SW.asked ? 'indisponible' : '…'}</b></div>
+    ${mismatch ? `<p class="note down" style="margin:8px 0 0">Les fichiers chargés et le cache hors ligne ne sont pas de la même version : la mise à jour est incomplète. Force-la ci-dessous.</p>` : ''}
+    <small class="note">Si un écran ne se comporte pas comme prévu, compare d'abord cette version à la dernière publiée. « Forcer la mise à jour » vide le cache de l'app et recharge les fichiers depuis le serveur. Tes séances, tes réglages et ta connexion ne sont pas touchés.</small>
+    <button class="btn" data-act="forceupdate" id="fupd">Forcer la mise à jour</button>
   </section>`;
+}
+
+const SW = { cache: null, asked: false, nagged: false };
+let swReg = null;
+
+function swAsk() {
+  try {
+    const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (c) { SW.asked = true; c.postMessage('version'); }
+  } catch (e) { }
+}
+
+function swNotice() {
+  if (SW.nagged) return; SW.nagged = true;
+  const el = $('#toast'); if (!el) return;
+  clearTimeout(undoT); undoFn = null;
+  el.innerHTML = `<span>Nouvelle version installée.</span><button data-act="swreload">Mettre à jour</button>`;
+  el.classList.add('on');
+}
+
+async function forceUpdate() {
+  const b = $('#fupd'); if (b) { b.disabled = true; b.textContent = 'Mise à jour…'; }
+  try {
+    if (swReg) await swReg.unregister().catch(() => { });
+    else if (navigator.serviceWorker) {
+      const rs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(rs.map(r => r.unregister().catch(() => { })));
+    }
+  } catch (e) { }
+  try {
+    if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
+  } catch (e) { }
+  // Les données (séances, compte, clé) vivent dans IndexedDB / localStorage : rien n'est effacé ici.
+  const u = location.origin + location.pathname + '?maj=' + Date.now();
+  try { location.replace(u); } catch (e) { location.href = u; }
+}
+
+function swSetup() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+  const hadCtrl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('message', ev => {
+    const d = ev.data || {};
+    if (d.type === 'swv') { SW.cache = d.cache; if (S.sub === 'settings') render(); }
+  });
+  navigator.serviceWorker.addEventListener('controllerchange', () => { swAsk(); if (hadCtrl) swNotice(); });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    swReg = reg;
+    swAsk();
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing || reg.waiting; if (!nw) return;
+      nw.addEventListener('statechange', () => {
+        if ((nw.state === 'installed' || nw.state === 'activated') && hadCtrl) swNotice();
+      });
+    });
+    setTimeout(() => { reg.update().catch(() => { }); }, 2500);
+  }).catch(() => { });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    swAsk();
+    if (swReg) swReg.update().catch(() => { });
+  });
 }
 
 /* ---------- fiches techniques ---------- */
@@ -1675,6 +1757,8 @@ document.addEventListener('click', async ev => {
     case 'perweek': cfg.perWeek = +t.dataset.n; saveCfg(); render(); break;
     case 'analyze': analyze(); break;
     case 'testkey': testKey(); break;
+    case 'forceupdate': await forceUpdate(); break;
+    case 'swreload': location.reload(); break;
     case 'export': exportData(); break;
     case 'import': $('#importfile').click(); break;
   }
@@ -2059,5 +2143,5 @@ function openExBrowse() {
     else render();
   });
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
+  swSetup();
 })();
