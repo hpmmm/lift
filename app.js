@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v20';
+const VERSION = 'v21';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -2192,11 +2192,45 @@ async function analyzeBody() {
 
 
 /* ---------- profil (page d'accueil du profil, statistiques, corps, réglages) ---------- */
-function barChart(vals, labels) {
-  const W = 320, H = 150, L = 8, R = 8, T = 10, B = 22, n = vals.length, mx = Math.max(...vals, 1e-9), bw = (W - L - R) / n;
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Activité par semaine"><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#272729"/>`
+// Histogramme. Au-delà de 10 barres les valeurs ne sont plus lisibles : on ne
+// les écrit qu'en deçà, ce qui rend le changement de métrique visible.
+function barChart(vals, labels, show = false) {
+  const W = 320, H = 150, L = 8, R = 8, T = show ? 20 : 10, B = 22, n = vals.length, mx = Math.max(...vals, 1e-9), bw = (W - L - R) / n;
+  const num = v => v >= 1000 ? Math.round(v / 100) / 10 + 'k' : v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10).replace('.', ',');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Activité"><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#272729"/>`
     + vals.map((v, i) => { const h = v / mx * (H - T - B), x = L + i * bw + 3; return `<rect x="${x}" y="${H - B - h}" width="${bw - 6}" height="${Math.max(h, v > 0 ? 2 : 0)}" rx="3" fill="${i === n - 1 ? '#ff3030' : '#8a2222'}"${i === n - 1 ? ' style="filter:drop-shadow(0 0 4px rgba(255,48,48,.6))"' : ''}/>`; }).join('')
-    + labels.map((l, i) => i % 3 === 0 || i === n - 1 ? `<text x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${l}</text>` : '').join('') + '</svg>';
+    + (show ? vals.map((v, i) => v > 0 ? `<text class="bv" x="${L + i * bw + bw / 2}" y="${H - B - v / mx * (H - T - B) - 5}" text-anchor="middle">${num(v)}</text>` : '').join('') : '')
+    + labels.map((l, i) => (n <= 6 || i % 3 === 0 || i === n - 1) ? `<text x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${l}</text>` : '').join('') + '</svg>';
+}
+
+/* Graphique d'activité du profil. Tant que l'historique est court, un
+   découpage en semaines n'affiche que des colonnes vides : on montre alors
+   les dernières séances une par une. */
+function profChart() {
+  const fw = finished();
+  const val = w => S.pm === 'vol' ? wVol(w) : S.pm === 'sets' ? wSets(w) : durOdd(w) ? 0 : (w.endedAt - w.startedAt) / 3600000;
+  const unit = S.pm === 'vol' ? 'kg' : S.pm === 'sets' ? 'séries' : 'h';
+  const chips = `<div class="chips" style="margin:6px 0 0">${[['dur', 'Durée'], ['vol', 'Volume'], ['sets', 'Séries']].map(([k, l]) => `<button class="chip ${S.pm === k ? 'on' : ''}" data-act="pmetric" data-k="${k}">${l}</button>`).join('')}</div>`;
+  if (!fw.length) return `<section class="card"><p class="empty" style="margin:18px 0">Ta première séance remplira ce graphique.</p>${chips}</section>`;
+  const ms = mondayOf(Date.now()), nw = Math.round((ms - mondayOf(fw[0].startedAt)) / 604800000) + 1;
+  const bySession = nw < 4;
+  let vals, labels, cur, when;
+  if (bySession) {
+    const last = fw.slice(-10);
+    vals = last.map(val); labels = last.map(w => fmtDate(w.startedAt));
+    cur = vals[vals.length - 1]; when = 'dernière séance';
+  } else {
+    const n = Math.min(12, Math.max(6, nw));
+    const weeks = Array.from({ length: n }, (_, i) => addDays(ms, -7 * (n - 1 - i)));
+    vals = weeks.map(a => fw.filter(w => w.startedAt >= a && w.startedAt < addDays(a, 7)).reduce((t, w) => t + val(w), 0));
+    labels = weeks.map(a => fmtDate(a)); cur = vals[vals.length - 1]; when = 'cette semaine';
+  }
+  const shown = bySession ? fw.slice(-10) : fw.filter(w => w.startedAt >= addDays(ms, -7 * (vals.length - 1)));
+  const skipped = S.pm === 'dur' && shown.filter(durOdd).length;
+  return `<div class="lbl sec"><b style="color:var(--text);font:700 16px var(--sans,inherit);letter-spacing:0;text-transform:none">${S.pm === 'dur' ? fmt(Math.round(cur * 10) / 10) : Math.round(cur).toLocaleString('fr-FR')} ${unit}</b> ${when}</div>
+    <section class="card">${barChart(vals, labels, vals.length <= 10)}
+      <small class="note">${bySession ? 'Une barre par séance : le découpage par semaine arrivera après un mois d’historique.' : 'Une barre par semaine.'}${skipped ? ` ${skipped} séance${skipped > 1 ? 's' : ''} enregistrée${skipped > 1 ? 's' : ''} après coup : durée non comptée.` : ''}</small>
+      ${chips}</section>`;
 }
 function viewProfile() {
   if (S.sub === 'progress') return subPage('Statistiques', viewProgress());
@@ -2206,20 +2240,14 @@ function viewProfile() {
   if (S.sub === 'calendar') return viewCalendar();
   if (S.sub === 'friends') return viewFriends();
   if (S.sub === 'friend') return viewFriend();
-  const fw = finished(), name = cfg.pseudo || (S.user && S.user.email ? S.user.email.split('@')[0] : 'Moi'), ms = mondayOf(Date.now());
-  const weeks = Array.from({ length: 12 }, (_, i) => addDays(ms, -7 * (11 - i)));
-  const val = w => S.pm === 'vol' ? wVol(w) : S.pm === 'sets' ? wSets(w) : durOdd(w) ? 0 : (w.endedAt - w.startedAt) / 3600000;
-  const vals = weeks.map(a => fw.filter(w => w.startedAt >= a && w.startedAt < addDays(a, 7)).reduce((t, w) => t + val(w), 0));
-  const cur = vals[vals.length - 1], unit = S.pm === 'vol' ? 'kg' : S.pm === 'sets' ? 'séries' : 'h';
+  const fw = finished(), name = cfg.pseudo || (S.user && S.user.email ? S.user.email.split('@')[0] : 'Moi');
   const totalVol = fw.reduce((t, w) => t + wVol(w), 0), totalSets = fw.reduce((t, w) => t + wSets(w), 0);
   const online = navigator.onLine && !S.syncErr;
   return `<div class="phead"><div class="avatar">${esc(name.charAt(0).toUpperCase())}</div>
       <div class="pinfo"><b>${esc(name)}</b><small class="${online ? 'up' : 'down'}">${online ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</small></div>
       <button class="x gear" data-act="sub" data-s="settings" aria-label="Réglages">⚙</button></div>
     <div class="stats pstats"><div class="stat"><b>${fw.length}</b><span>Séances</span></div><div class="stat"><b>${totalSets.toLocaleString('fr-FR')}</b><span>Séries</span></div><div class="stat"><b>${totalVol >= 1000 ? fmt(Math.round(totalVol / 100) / 10) + ' t' : Math.round(totalVol) + ' kg'}</b><span>Volume</span></div></div>
-    <div class="lbl sec"><b style="color:var(--text);font:700 16px var(--sans,inherit);letter-spacing:0;text-transform:none">${S.pm === 'dur' ? fmt(Math.round(cur * 10) / 10) : Math.round(cur).toLocaleString('fr-FR')} ${unit}</b> cette semaine</div>
-    <section class="card">${barChart(vals, weeks.map(a => fmtDate(a)))}
-      <div class="chips" style="margin:6px 0 0">${[['dur', 'Durée'], ['vol', 'Volume'], ['sets', 'Séries']].map(([k, l]) => `<button class="chip ${S.pm === k ? 'on' : ''}" data-act="pmetric" data-k="${k}">${l}</button>`).join('')}</div></section>
+    ${profChart()}
     ${S.prs.length ? `<div class="lbl sec">Records</div><div class="prstrip">${prSorted().slice(0, 4).map(p => `<button class="prs-i" data-act="sub" data-s="records"><b>${p.w > 0 ? fmt(p.w) + ' kg' : 'PDC'}</b><span>× ${p.r}</span><small>${esc(exName(p.exId))}</small></button>`).join('')}</div>` : ''}
     <div class="lbl sec">Tableau de bord</div>
     <div class="tiles">

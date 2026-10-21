@@ -374,3 +374,6 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .sugg .plat{display:block;margin-top:2px}
 .tip.plateau{background:rgba(255,180,92,.09);color:#e8c89c}
 .tip.plateau b{color:#ffb45c}
+
+/* valeurs au-dessus des barres */
+.chart .bv{fill:var(--mute);font:600 9px var(--mono)}
