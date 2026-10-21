@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v18';
+const VERSION = 'v19';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -244,9 +244,14 @@ function bodySvg(view, prim, sec) {
 const hasMap = e => !!(e && e.prim && e.prim.length);
 const muscleMap = e => !hasMap(e) ? '' : `<div class="bodymap">${bodySvg('front', e.prim, e.sec)}${bodySvg('back', e.prim, e.sec)}
   <div class="leg"><span><i class="p"></i>${esc(e.prim.map(k => MU_FR[k] || k).join(' · '))}</span>${e.sec.length ? `<span><i class="s"></i>${esc(e.sec.map(k => MU_FR[k] || k).join(' · '))}</span>` : ''}</div></div>`;
-const exImgs = e => e && e.img ? [IMG_BASE + e.img + '/0.jpg', IMG_BASE + e.img + '/1.jpg'] : [];
-const thumb = e => e.img ? `<img class="thumb" src="${IMG_BASE}${e.img}/0.jpg" alt="" loading="lazy" decoding="async">` : '<span class="thumb ph"></span>';
-const eyeBtn = (e, cls) => e && (e.img || hasMap(e)) ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
+// Photos maison (dossier img/), prioritaires sur la banque d'images libre.
+// Valeur = nombre de photos, nommées img/<id>-1.jpg, img/<id>-2.jpg…
+const PHOTOS = { x98: 2 };
+const exImgs = e => !e ? [] :
+  PHOTOS[e.id] ? Array.from({ length: PHOTOS[e.id] }, (_, i) => `img/${e.id}-${i + 1}.jpg`) :
+    e.img ? [IMG_BASE + e.img + '/0.jpg', IMG_BASE + e.img + '/1.jpg'] : [];
+const thumb = e => { const u = exImgs(e)[0]; return u ? `<img class="thumb" src="${u}" alt="" loading="lazy" decoding="async">` : '<span class="thumb ph"></span>'; };
+const eyeBtn = (e, cls) => e && (e.img || PHOTOS[e.id] || hasMap(e)) ? `<button class="${cls}" data-act="exview" data-id="${e.id}" aria-label="Voir l'illustration">👁</button>` : '';
 const finished = () => S.workouts.filter(w => w.endedAt).sort((a, b) => a.startedAt - b.startedAt);
 const newSet = () => ({ w: null, r: null, done: false, type: 'N' });
 // Temps de repos : valeur par défaut des réglages, ou valeur propre à l'exercice.
