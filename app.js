@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v22';
+const VERSION = 'v23';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -604,8 +604,11 @@ function sessionPrompt(w) {
   });
   const wk = weeksSummary(4), ids = w.entries.map(e => e.exId);
   const muS = {}; for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; muS[m] = (muS[m] || 0) + workSets(e).length; }
-  const msNow = mondayOf(Date.now()), muWeek = muscleSets(msNow, Date.now() + 1);
-  const absent = MUSCLES.filter(m => !(muWeek[m] > 0));
+  // Semaine de la séance analysée, pas la semaine courante : une séance
+  // d'il y a trois semaines doit être jugée dans son propre contexte.
+  const wMon = mondayOf(w.startedAt), wEnd = Math.min(Date.now(), addDays(wMon, 7)) + 1;
+  const muWeek = muscleSets(wMon, wEnd), absent = MUSCLES.filter(m => !(muWeek[m] > 0));
+  const old = Date.now() - w.startedAt > 10 * 86400000;
   return `${profileLine()}
 
 ${historyLine()}
@@ -619,7 +622,8 @@ ${lines.join('\n')}
 RECORDS : ${prsFor(w).join(' ; ') || 'aucun'}
 
 RÉPARTITION DE CETTE SÉANCE (séries de travail) : ${fmtMuscles(muS)}
-SEMAINE EN COURS (depuis lundi, séries par groupe) : ${fmtMuscles(muWeek)}${absent.length ? `\nNON TRAVAILLÉ CETTE SEMAINE : ${absent.join(', ')}` : ''}
+SEMAINE DE CETTE SÉANCE (du ${fmtDate(wMon)}, séries par groupe) : ${fmtMuscles(muWeek)}${absent.length ? `\nNON TRAVAILLÉ CETTE SEMAINE-LÀ : ${absent.join(', ')}` : ''}
+${old ? `(Séance passée, analysée après coup : les données d'intervalle entre séries peuvent manquer si elles sont antérieures à cette fonctionnalité. Juge-la dans son contexte de l'époque, et formule les recommandations pour les séances à venir.)` : ''}
 
 EXERCICES DISPONIBLES DANS L'APP POUR CES MÊMES MUSCLES (non utilisés dans cette séance ; tu ne peux proposer de substitution ou d'ajout qu'en les nommant exactement tels qu'écrits ici) :
 ${subsFor(ids) || '(aucun autre exercice disponible)'}
