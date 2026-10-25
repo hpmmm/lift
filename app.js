@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v21';
+const VERSION = 'v22';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -565,18 +565,47 @@ const setTxt = (s, exId, ts) => {
 // libellé court affiché dans l'app (ce que tu as tapé)
 const setChip = (s, exId) => (exId && hasBw(exId) ? (setW(s) ? (setW(s) > 0 ? 'PDC+' + fmt(setW(s)) : 'PDC' + fmt(setW(s))) : 'PDC') : fmt(setW(s))) + '×' + s.r;
 
+// Intervalle médian entre deux séries validées (repos + durée de la série).
+function restReal(e) {
+  const ts = e.sets.filter(s => s.done && s.ts > 0).map(s => s.ts).sort((a, b) => a - b);
+  if (ts.length < 2) return null;
+  const g = []; for (let i = 1; i < ts.length; i++) g.push((ts[i] - ts[i - 1]) / 1000);
+  g.sort((a, b) => a - b);
+  const m = Math.round(g[Math.floor(g.length / 2)]);
+  return m > 15 && m < 1800 ? m : null;
+}
+// Un seul muscle secondaire (les avant-bras sur un curl) ne fait pas un
+// mouvement polyarticulaire : on exige au moins deux groupes assistants.
+const isCompound = id => (ex(id)?.sec || []).length >= 2;
+// Exercices du catalogue visant les mêmes muscles, non utilisés dans la séance :
+// sans cette liste le modèle propose des exercices qui n'existent pas dans l'app.
+function subsFor(exIds) {
+  const used = new Set(exIds), out = [];
+  for (const m of [...new Set(exIds.map(id => ex(id)?.muscle).filter(Boolean))]) {
+    const l = S.exercises.filter(e => e.muscle === m && !used.has(e.id)).map(e => e.name).slice(0, 10);
+    if (l.length) out.push(`- ${m} : ${l.join(', ')}`);
+  }
+  return out.join('\n');
+}
+
 function sessionPrompt(w) {
-  const lines = w.entries.map(e => {
+  const lines = w.entries.map((e, i) => {
     const ws = workSets(e), b = best(ws, e.exId, w.startedAt), h = exHistory(e.exId, w.startedAt), p = h[h.length - 1];
     const wu = e.sets.filter(x => x.done && x.type === 'W' && x.r > 0);
-    let l = `- ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}]${sidesOf(e.exId) > 1 ? ' (charge par côté : le volume compte les deux)' : ''} : ${wu.length ? `échauffement ${wu.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} ; ` : ''}séries de travail ${ws.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} | volume ${fmt(entryVol(e, w.startedAt))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}`;
+    const rr = restReal(e), st = stagFor(e.exId);
+    let l = `- [${i + 1}e exercice] ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}, ${isCompound(e.exId) ? 'polyarticulaire' : 'isolation'}]${sidesOf(e.exId) > 1 ? ' (charge par côté : le volume compte les deux)' : ''} : ${wu.length ? `échauffement ${wu.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} ; ` : ''}séries de travail ${ws.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} | volume ${fmt(entryVol(e, w.startedAt))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}`;
+    if (rr) l += ` | intervalle médian entre séries ${Math.round(rr / 5) * 5} s (repos visé ${restFor(e.exId)} s ; l'intervalle inclut la durée de la série)`;
+    if (st) l += ` | PLATEAU : 3 séances sans record`;
     l += p ? ` | séance précédente (${fmtDate(p.t)}) : ${p.sets.map(x => setTxt(x, e.exId, p.t)).join(', ')} (e1RM ${fmt(Math.round(p.best.e * 10) / 10)})` : ' | première fois enregistrée';
     const older = h.slice(-5, -1);
     if (older.length) l += ` | avant : ` + older.map(o => `${fmtDate(o.t)} ${setTxt(o.sets.reduce((x, y) => e1rm(setW(y), y.r) > e1rm(setW(x), x.r) ? y : x), e.exId, o.t)}`).join(' ; ');
     if (e.note && e.note.trim()) l += ` | COMMENTAIRE DE L'UTILISATEUR : « ${e.note.trim().replace(/\s+/g, ' ')} »`;
     return l;
   });
-  const wk = weeksSummary(4);
+  const wk = weeksSummary(4), ids = w.entries.map(e => e.exId);
+  const muS = {}; for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; muS[m] = (muS[m] || 0) + workSets(e).length; }
+  const msNow = mondayOf(Date.now()), muWeek = muscleSets(msNow, Date.now() + 1);
+  const absent = MUSCLES.filter(m => !(muWeek[m] > 0));
   return `${profileLine()}
 
 ${historyLine()}
@@ -589,17 +618,32 @@ ${lines.join('\n')}
 
 RECORDS : ${prsFor(w).join(' ; ') || 'aucun'}
 
-${ficheBlock(w.entries.map(e => e.exId))}
+RÉPARTITION DE CETTE SÉANCE (séries de travail) : ${fmtMuscles(muS)}
+SEMAINE EN COURS (depuis lundi, séries par groupe) : ${fmtMuscles(muWeek)}${absent.length ? `\nNON TRAVAILLÉ CETTE SEMAINE : ${absent.join(', ')}` : ''}
+
+EXERCICES DISPONIBLES DANS L'APP POUR CES MÊMES MUSCLES (non utilisés dans cette séance ; tu ne peux proposer de substitution ou d'ajout qu'en les nommant exactement tels qu'écrits ici) :
+${subsFor(ids) || '(aucun autre exercice disponible)'}
+
+${ficheBlock(ids)}
 
 FRÉQUENCE (4 dernières semaines, séances/semaine, séries par groupe) :
 ${wk.map(x => `- semaine du ${fmtDate(x.a)} : ${x.c} séance(s) — séries : ${fmtMuscles(x.mu)}`).join('\n')}
 
-Rédige le bilan :
-## Bilan de la séance (2-3 lignes : qualité, volume, point marquant)
-## Progression (pour chaque exercice : verdict court + charge × reps cibles à la prochaine séance, selon la règle de double progression adaptée à l'objectif)
-## Semaine (ajustement par rapport à l'objectif et aux ${cfg.perWeek} séances/semaine visées ; équilibre entre groupes musculaires ; quoi faire à la prochaine séance)
-## À surveiller (1 à 2 points, seulement s'ils sont justifiés par les données)
-Maximum 250 mots.`;
+TA MISSION : analyser cette séance, pas la raconter. L'utilisateur a ses chiffres sous les yeux dans l'app : ne les lui réénumère pas. Chaque phrase doit soit porter un jugement, soit prescrire une action, et s'appuyer sur une donnée précise (charge, répétitions, RIR, intervalle de repos, série, e1RM). Sois franc quand quelque chose ne va pas : volume insuffisant ou excessif sur un muscle, ordre des exercices discutable, redondance entre deux exercices qui sollicitent la même chose, séries trop faciles au vu du RIR, repos trop courts ou trop longs pour l'objectif, progression absente. Si un point est bon, dis-le en une ligne et passe à la suite.
+
+Plan :
+## Verdict
+Deux ou trois phrases : ce que vaut cette séance et le problème principal à corriger.
+## Structure
+Ordre des exercices, équilibre entre les muscles, redondances, volume de la séance et de la semaine par rapport à l'objectif. Ce qui manque, ce qui est en trop.
+## Exécution et intensité
+Ce que montrent le RIR, les intervalles de repos et l'écart entre séries (fatigue, charges trop légères ou trop lourdes, séries non menées assez près de l'échec).
+## Exercices
+Lesquels garder, lesquels remplacer et par quoi, lesquels ajouter — uniquement des noms figurant dans la liste fournie, chacun avec la raison du changement. Si aucun changement ne se justifie, écris-le en une ligne.
+## Prochaine séance
+Pour chaque exercice conservé : charge × répétitions visées, selon la double progression adaptée à l'objectif.
+
+Maximum 350 mots.`;
 }
 
 function notesBlock(since) {
