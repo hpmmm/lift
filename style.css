@@ -418,3 +418,20 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .card.bm.typ span{font-size:13px;line-height:1.35;display:block}
 .card.bm.typ.on{border-color:var(--red);background:var(--redbg)}
 .card.bm.typ:disabled{opacity:.45}
+
+/* recherche dans le Journal */
+.jhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.jhead .x{width:36px;height:36px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--mute);display:flex;align-items:center;justify-content:center;flex:none}
+.jhead .x.on{background:var(--redbg);border-color:transparent;color:var(--red)}
+
+/* photos de progression */
+.ph-strip{display:flex;gap:8px;overflow-x:auto;margin:10px -18px 12px;padding:0 18px;scrollbar-width:none}
+.ph-strip::-webkit-scrollbar{display:none}
+.ph-t{flex:none;width:92px;text-align:center;padding:0}
+.ph-t img{width:92px;height:122px;object-fit:cover;border-radius:12px;display:block;background:var(--panel2)}
+.ph-t span{display:block;margin-top:5px;font-size:11.5px;color:var(--dim2)}
+.ph-full{width:100%;border-radius:14px;display:block;margin-bottom:12px}
+.ph-cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.ph-cmp img{width:100%;border-radius:12px;display:block;background:var(--panel2);aspect-ratio:3/4;object-fit:cover}
+.ph-cmp select{margin-top:8px;height:40px;font-size:13.5px}
+.ph-cmp .note{display:block;text-align:center;margin-top:4px}

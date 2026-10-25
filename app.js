@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v28';
+const VERSION = 'v29';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -193,7 +193,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
   chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight', sub: '', pm: 'dur',
-  prs: [], cal: { z: 'm', ref: Date.now() }, volZ: 7, jz: 'list', cz: 'chat',
+  prs: [], cal: { z: 'm', ref: Date.now() }, volZ: 7, jz: 'list', cz: 'chat', jq: '', jper: 'all', jopen: false, photos: [], cmpA: '', cmpB: '',
   friends: [], shared: {}, sharedUnsubs: {}, inbox: [], friend: '', fr: { q: '', results: [], msg: '', busy: false },
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
@@ -304,6 +304,7 @@ function startSession(user) {
     backend.watch(user.uid, 'chat', (list, m) => { if (list) applyChat(list); }),
     backend.watch(user.uid, 'facts', (list, m) => { if (list) applyFacts(list); }),
     backend.watch(user.uid, 'body', (list, m) => { if (list) applyBody(list); }),
+    backend.watch(user.uid, 'photos', (list) => { if (list) applyPhotos(list); }),
     backend.watch(user.uid, 'prs', (list) => { if (list) applyPrs(list); ready('p'); }),
     backend.watchFriendships(user.uid, (list) => { if (list) applyFriends(list); }),
     backend.watch(user.uid, 'inbox', (list) => { if (list) applyInbox(list); })
@@ -936,11 +937,39 @@ function viewCoach() {
 
 function viewFriendsTab() { return S.sub === 'friend' ? viewFriend() : viewFriends(); }
 
-function viewHistory() {
-  const fw = finished().reverse();
-  if (!fw.length) return '<p class="empty">Aucune séance terminée pour l’instant. Ton historique apparaîtra ici.</p>';
-  return `<div class="lbl" style="margin-bottom:10px">${fw.length} séance${fw.length > 1 ? 's' : ''}</div>${fw.map(workoutCard).join('')}`;
+/* ---------- recherche dans le Journal ----------
+   Repliée par défaut : une loupe dans l'en-tête. Cherche à la fois dans le
+   nom de la séance, les exercices qu'elle contient, les muscles et la date. */
+const ICON_SEARCH = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>';
+const PERIODS = [['all', 'Tout'], ['y', 'Cette année'], ['m', 'Ce mois']];
+
+function journalFilter() {
+  const all = finished().slice().reverse();
+  const q = norm(S.jq || '').split(/\s+/).filter(Boolean);
+  const now = new Date();
+  const from = S.jper === 'm' ? new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    : S.jper === 'y' ? new Date(now.getFullYear(), 0, 1).getTime() : 0;
+  const hay = w => norm([w.name, fmtDateL(w.startedAt), ...w.entries.map(e => exName(e.exId) + ' ' + (ex(e.exId)?.muscle || ''))].join(' '));
+  const list = all.filter(w => w.startedAt >= from && (!q.length || q.every(k => hay(w).includes(k))));
+  return { all, list };
 }
+const journalCount = (all, list) => list.length === all.length
+  ? `${all.length} séance${all.length > 1 ? 's' : ''}`
+  : `${list.length} séance${list.length > 1 ? 's' : ''} sur ${all.length}`;
+const journalListHtml = list => list.length ? list.map(workoutCard).join('')
+  : '<p class="empty">Aucune séance ne correspond.</p>';
+
+function viewHistory() {
+  const { all, list } = journalFilter();
+  if (!all.length) return '<p class="empty">Aucune séance terminée pour l’instant. Ton historique apparaîtra ici.</p>';
+  const open = !!S.jopen;
+  return `<div class="jhead"><span class="lbl" id="j-count">${journalCount(all, list)}</span>
+      <button class="x ${open ? 'on' : ''}" data-act="jsearch" aria-label="Rechercher">${ICON_SEARCH}</button></div>
+    ${open ? `<input id="j-q" class="field" placeholder="Nom de séance, exercice, muscle…" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(S.jq)}" aria-label="Rechercher une séance">
+      <div class="chips" style="padding-top:8px">${PERIODS.map(([k, l]) => `<button class="chip ${(S.jper || 'all') === k ? 'on' : ''}" data-act="jper" data-k="${k}">${l}</button>`).join('')}</div>` : ''}
+    <div id="j-list">${journalListHtml(list)}</div>`;
+}
+
 
 /* Séries de travail par muscle, sur 7 jours ou en moyenne hebdomadaire sur
    4 semaines, comparées à la période précédente. Les deux repères sur la barre
@@ -1653,7 +1682,7 @@ async function testKey() {
 }
 
 async function exportData() {
-  const data = { app: 'lift', v: 2, exportedAt: Date.now(), exercises: S.exercises, workouts: S.workouts, routines: S.routines, body: S.body, facts: S.facts, cfg: Object.fromEntries(SYNCED.map(k => [k, cfg[k]])) };
+  const data = { app: 'lift', v: 2, exportedAt: Date.now(), exercises: S.exercises, workouts: S.workouts, routines: S.routines, body: S.body, photos: S.photos, facts: S.facts, cfg: Object.fromEntries(SYNCED.map(k => [k, cfg[k]])) };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const file = new File([blob], `lift-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2167,10 +2196,16 @@ document.addEventListener('click', async ev => {
     case 'analyze': analyze(); break;
     case 'testkey': testKey(); break;
     case 'volz': S.volZ = +t.dataset.n; render(); break;
+    case 'jsearch': S.jopen = !S.jopen; if (!S.jopen) { S.jq = ''; S.jper = 'all'; } render(); if (S.jopen) { const f = $('#j-q'); if (f) f.focus(); } break;
+    case 'jper': S.jper = t.dataset.k; render(); break;
     case 'year-pick': yearPick(); break;
     case 'year-tog': yearToggle(id); break;
     case 'year-img': await yearImage(); break;
     case 'avatar-open': avatarSheet(); break;
+    case 'photo-add': $('#photofile').click(); break;
+    case 'photo-open': photoOpen(id); break;
+    case 'photo-del': photoDel(id); break;
+    case 'photo-cmp': photoCompare(); break;
     case 'avatar-pick': $('#avatarfile').click(); break;
     case 'avatar-del': cfg.avatar = ''; saveCfg(); closeSheet(); render(); schedulePush(true); break;
     case 'jz': S.jz = t.dataset.k; render(); window.scrollTo(0, 0); break;
@@ -2188,6 +2223,18 @@ let frTimer = null;
 document.addEventListener('input', ev => {
   const t = ev.target;
   if (t.id === 'fr-q') { S.fr.q = t.value; clearTimeout(frTimer); frTimer = setTimeout(() => searchFriends(S.fr.q), 350); return; }
+  // Filtrage local : on ne redessine que la liste, sinon le champ perd le focus.
+  if (t.dataset.f === 'cmpa' || t.dataset.f === 'cmpb') {
+    if (t.dataset.f === 'cmpa') S.cmpA = t.value; else S.cmpB = t.value;
+    photoCompare(); return;
+  }
+  if (t.id === 'j-q') {
+    S.jq = t.value;
+    const { all, list } = journalFilter(), box = $('#j-list'), cnt = $('#j-count');
+    if (box) box.innerHTML = journalListHtml(list);
+    if (cnt) cnt.textContent = journalCount(all, list);
+    return;
+  }
   if (t.id === 'ex-q') { $('#ex-list').innerHTML = exBrowseList(t.value); return; }
   if (t.id === 'pk-q' && picker) { picker.q = t.value; $('#pk-list').innerHTML = pkList(); return; }
   if (t.dataset.f === 'chat') { S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; return; }
@@ -2242,6 +2289,7 @@ document.addEventListener('keydown', ev => {
 });
 $('#importfile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) importData(f); });
 $('#avatarfile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) setAvatar(f); });
+$('#photofile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) addPhoto(f); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wake(); tickRest(); checkStale(); } else flush(); });
 
 setInterval(() => { const c = $('#clock'); if (c && S.active) c.textContent = clock(Date.now() - S.active.startedAt); }, 1000);
@@ -2409,6 +2457,74 @@ function pickFile(multiple, cb) {
 }
 
 /* onglet Corps */
+/* ---------- photos de progression ----------
+   Privées : jamais partagées aux amis, jamais dans le dépôt. Réduites à
+   900 px et compressées avant d'être enregistrées dans le compte. */
+function applyPhotos(list) { sortBy(list, 'ts'); if (JSON.stringify(list) === JSON.stringify(S.photos)) return; S.photos = list; renderSoft(); }
+const PH_PX = 900;
+const weightAt = ts => {
+  let best = null, d = Infinity;
+  for (const m of S.body) if (m.weight > 0 && Math.abs(m.ts - ts) < d) { d = Math.abs(m.ts - ts); best = m; }
+  return best && d < 21 * 86400000 ? best.weight : null;
+};
+function addPhoto(file) {
+  if (!/^image\//.test(file.type)) { alert('Choisis une image.'); return; }
+  const fr = new FileReader();
+  fr.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, PH_PX / Math.max(im.width, im.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+      x.drawImage(im, 0, 0, c.width, c.height);
+      let q = .72, url = c.toDataURL('image/jpeg', q);
+      while (url.length > 260000 && q > .35) { q -= .1; url = c.toDataURL('image/jpeg', q); }
+      if (url.length > 400000) { alert("Image trop lourde même après compression."); return; }
+      const o = { id: uid(), ts: Date.now(), img: url };
+      S.photos.push(o); sortBy(S.photos, 'ts'); put('photos', o); render();
+    };
+    im.onerror = () => alert('Image illisible.');
+    im.src = fr.result;
+  };
+  fr.onerror = () => alert('Lecture impossible.');
+  fr.readAsDataURL(file);
+}
+function photoOpen(id) {
+  const p = S.photos.find(x => x.id === id); if (!p) return;
+  const w = weightAt(p.ts);
+  sheet(`<h3>${fmtDateL(p.ts)}</h3>
+    ${w ? `<p class="muted" style="margin:-8px 0 10px;font-size:14px">${fmt(w)} kg à cette date</p>` : ''}
+    <img class="ph-full" src="${esc(p.img)}" alt="">
+    <button class="btn danger-text" data-act="photo-del" data-id="${p.id}">Supprimer cette photo</button>`);
+}
+function photoDel(id) {
+  const p = S.photos.find(x => x.id === id); if (!p || !confirm('Supprimer cette photo ?')) return;
+  S.photos = S.photos.filter(x => x.id !== id); del('photos', id); closeSheet(); render();
+}
+function photoCompare() {
+  const ps = S.photos; if (ps.length < 2) return;
+  const a = ps.find(x => x.id === S.cmpA) || ps[0], b = ps.find(x => x.id === S.cmpB) || ps[ps.length - 1];
+  const opts = (sel) => ps.map(p => `<option value="${p.id}" ${p.id === sel.id ? 'selected' : ''}>${fmtDate(p.ts)}</option>`).join('');
+  const days = Math.round(Math.abs(b.ts - a.ts) / 86400000);
+  const wa = weightAt(a.ts), wb = weightAt(b.ts);
+  sheet(`<h3>Comparer</h3>
+    <div class="ph-cmp">
+      <div><img src="${esc(a.img)}" alt=""><select class="field" data-f="cmpa">${opts(a)}</select>${wa ? `<small class="note">${fmt(wa)} kg</small>` : ''}</div>
+      <div><img src="${esc(b.img)}" alt=""><select class="field" data-f="cmpb">${opts(b)}</select>${wb ? `<small class="note">${fmt(wb)} kg</small>` : ''}</div>
+    </div>
+    <p class="muted" style="font-size:14px;text-align:center">${days} jour${days > 1 ? 's' : ''} d'écart${wa && wb ? ` · ${wb - wa >= 0 ? '+' : ''}${fmt(Math.round((wb - wa) * 10) / 10)} kg` : ''}</p>`);
+}
+function photosBlock() {
+  const ps = S.photos.slice().reverse();
+  return `<div class="lbl sec">Photos de progression</div>
+    <section class="card">
+      <small class="note">Même pose, même lumière, même heure : c'est la comparaison dans le temps qui est parlante. Elles restent dans ton compte et ne sont jamais partagées.</small>
+      ${ps.length ? `<div class="ph-strip">${ps.map(p => `<button class="ph-t" data-act="photo-open" data-id="${p.id}"><img src="${esc(p.img)}" alt="" loading="lazy"><span>${fmtDate(p.ts)}</span></button>`).join('')}</div>` : '<p class="empty" style="margin:10px 0">Aucune photo pour l’instant.</p>'}
+      <div class="row"><button class="btn" data-act="photo-add">+ Ajouter une photo</button>${ps.length > 1 ? '<button class="btn" data-act="photo-cmp">Comparer</button>' : ''}</div>
+    </section>`;
+}
+
 function viewBody() {
   const b = S.body, last = b[b.length - 1], met = BODY_METRICS.find(m => m[0] === S.bodyMetric) || BODY_METRICS[0];
   const pts = b.filter(m => m[met[0]] != null).map(m => ({ t: m.ts, v: m[met[0]] }));
@@ -2421,6 +2537,7 @@ function viewBody() {
     ${S.bodyBusy ? '<div class="loading"><i></i>Lecture des captures par Gemini…</div>' : ''}${S.bodyMsg ? `<div class="err">${esc(S.bodyMsg)}</div>` : ''}</section>
   ${last ? `<div class="lbl sec">Évolution</div><section class="card"><div class="chips" style="margin-bottom:0">${BODY_METRICS.map(([k, l]) => `<button class="chip ${met[0] === k ? 'on' : ''}" data-act="body-metric" data-k="${k}">${l}</button>`).join('')}</div>
     ${pts.length ? lineChart(pts, met[2]) : '<p class="empty">Pas de valeur pour cette mesure.</p>'}${seg}</section>
+  ${photosBlock()}
   <div class="lbl sec">Analyse du coach</div><section class="card"><button class="btn primary" data-act="body-analyze" id="banbtn">Analyser ma composition</button><div id="banout">${an ? `<div class="review">${md(an.text)}<div class="meta">${new Date(an.ts).toLocaleDateString('fr-FR')} · ${esc(an.model)}</div></div>` : ''}</div></section>
   <div class="lbl sec">Mesures</div>${b.slice().reverse().map(m => `<button class="card bm" data-act="body-open" data-id="${m.id}"><b>${new Date(m.ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</b><span class="muted">${[m.weight != null ? fmt(m.weight) + ' kg' : '', m.bodyFat != null ? 'TGC ' + fmt(m.bodyFat) + ' %' : '', m.smm != null ? 'MMS ' + fmt(m.smm) + ' kg' : ''].filter(Boolean).join(' · ')}</span></button>`).join('')}` : '<p class="empty" style="margin-top:24px">Aucune mesure pour l’instant.</p>'}`;
 }
