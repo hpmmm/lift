@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v27';
+const VERSION = 'v28';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -402,7 +402,11 @@ function applySettings(s) {
 }
 
 /* ---------- calculs ---------- */
+// Séries retenues pour le volume : les dégressives en font partie, c'est du
+// travail réel. Pour COMPTER les séries, voir countSets : une dégressive
+// prolonge la série précédente, elle n'en ajoute pas une.
 const workSets = e => e.sets.filter(s => s.done && s.type !== 'W' && s.r > 0);
+const countSets = e => workSets(e).filter(s => s.type !== 'D');
 const setW = s => s.w || 0;                       // charge saisie, telle quelle
 const e1rm = (w, r) => r <= 0 ? 0 : r === 1 ? w : w * (1 + Math.min(r, 12) / 30);
 
@@ -439,7 +443,7 @@ function best(sets, exId, ts) {
 }
 const entryVol = (e, ts) => workSets(e).reduce((a, s) => a + loadAt(e.exId, s, ts) * s.r, 0) * sidesOf(e.exId);
 const wVol = w => w.entries.reduce((a, e) => a + entryVol(e, w.startedAt), 0);
-const wSets = w => w.entries.reduce((a, e) => a + workSets(e).length, 0);
+const wSets = w => w.entries.reduce((a, e) => a + countSets(e).length, 0);
 const metric = b => b ? (b.e > 0 ? b.e : b.r) : 0;
 
 function exHistory(exId, beforeTs = Infinity) {
@@ -474,7 +478,7 @@ function muscleSets(from, to) {
   const o = {};
   for (const w of finished()) {
     if (w.startedAt < from || w.startedAt >= to) continue;
-    for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; o[m] = (o[m] || 0) + workSets(e).length; }
+    for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; o[m] = (o[m] || 0) + countSets(e).length; }
   }
   return o;
 }
@@ -560,7 +564,7 @@ function profileLine() {
 }
 const setTxt = (s, exId, ts) => {
   const bw = exId && hasBw(exId), w = exId ? loadAt(exId, s, ts) : setW(s);
-  return `${bw ? (setW(s) ? (setW(s) > 0 ? 'PDC+' + fmt(setW(s)) : 'PDC' + fmt(setW(s))) : 'PDC') + ' = ' : ''}${fmt(w)}×${s.r}${s.rir != null ? ` (RIR ${s.rir})` : ''}`;
+  return `${bw ? (setW(s) ? (setW(s) > 0 ? 'PDC+' + fmt(setW(s)) : 'PDC' + fmt(setW(s))) : 'PDC') + ' = ' : ''}${fmt(w)}×${s.r}${s.rir != null ? ` (RIR ${s.rir})` : ''}${s.type === 'D' ? ' [dégressive]' : ''}${s.fail ? ' [échec]' : ''}`;
 };
 // libellé court affiché dans l'app (ce que tu as tapé)
 const setChip = (s, exId) => (exId && hasBw(exId) ? (setW(s) ? (setW(s) > 0 ? 'PDC+' + fmt(setW(s)) : 'PDC' + fmt(setW(s))) : 'PDC') : fmt(setW(s))) + '×' + s.r;
@@ -603,7 +607,7 @@ function sessionPrompt(w) {
     return l;
   });
   const wk = weeksSummary(4), ids = w.entries.map(e => e.exId);
-  const muS = {}; for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; muS[m] = (muS[m] || 0) + workSets(e).length; }
+  const muS = {}; for (const e of w.entries) { const m = ex(e.exId)?.muscle || 'Autre'; muS[m] = (muS[m] || 0) + countSets(e).length; }
   // Semaine de la séance analysée, pas la semaine courante : une séance
   // d'il y a trois semaines doit être jugée dans son propre contexte.
   const wMon = mondayOf(w.startedAt), wEnd = Math.min(Date.now(), addDays(wMon, 7)) + 1;
@@ -616,6 +620,7 @@ ${historyLine()}
 SÉANCE DU ${fmtDateL(w.startedAt)} « ${w.name} » — durée ${durOdd(w) ? 'non significative' : dur(w.endedAt - w.startedAt)}, ${wSets(w)} séries de travail (hors échauffement), volume ${fmt(wVol(w))} kg.
 ${durOdd(w) ? DUR_NOTE + '\n' : ''}
 (Les séries d'échauffement sont indiquées à part et exclues du volume, du e1RM et des records.)
+(Une série notée [dégressive] a été enchaînée sans repos juste après la précédente, avec une charge réduite : c'est un prolongement de cette série, pas une série supplémentaire, et le signe d'une intensité volontairement poussée. Une série notée [échec] a été menée jusqu'à l'impossibilité de faire une répétition de plus.)
 (Un « COMMENTAIRE DE L'UTILISATEUR » explique le contexte d'un exercice — aide d'un partenaire, série délestée, blessure, reprise progressive, etc. Tu dois en tenir compte : une série avec aide ou une charge réduite volontairement n'est pas un échec ni une régression ; adapte la recommandation à la situation décrite, avec prudence en cas de blessure.)
 ${lines.join('\n')}
 
@@ -871,6 +876,10 @@ function viewActive() {
 
 function placeholders(e, i) {
   if (e.sets[i].type === 'W') return { w: '', r: '' };
+  if (e.sets[i].type === 'D') {
+    for (let j = i - 1; j >= 0; j--) { const x = e.sets[j]; if (x.type !== 'W' && x.r > 0) return { w: Math.round(setW(x) * 0.8 / 2.5) * 2.5 || '', r: x.r }; }
+    return { w: '', r: '' };
+  }
   let n = 0; for (let j = 0; j <= i; j++) if (e.sets[j].type !== 'W') n++;
   for (let j = i - 1; j >= 0; j--) { const x = e.sets[j]; if (x.type !== 'W' && x.done && x.r > 0) return { w: x.w ?? 0, r: x.r }; }
   const prev = prevFor(e.exId), p = prev && prev.sets[Math.min(n, prev.sets.length) - 1];
@@ -880,10 +889,10 @@ function placeholders(e, i) {
 function entryHtml(e) {
   const m = ex(e.exId)?.muscle || '', prev = prevFor(e.exId); let n = 0;
   const rows = e.sets.map((s, i) => {
-    const isW = s.type === 'W'; if (!isW) n++;
-    const p = !isW && prev ? prev.sets[n - 1] : null, ph = placeholders(e, i);
-    return `<div class="set ${cfg.rir ? 'r6' : ''} ${s.done ? 'done' : ''}" data-e="${e.id}" data-i="${i}">
-      <button class="setno ${isW ? 'w' : ''}" data-act="settype" aria-label="Type de série">${isW ? 'É' : n}</button>
+    const isW = s.type === 'W', isD = s.type === 'D'; if (!isW && !isD) n++;
+    const p = !isW && !isD && prev ? prev.sets.filter(x => x.type !== 'D')[n - 1] : null, ph = placeholders(e, i);
+    return `<div class="set ${cfg.rir ? 'r6' : ''} ${s.done ? 'done' : ''} ${isD ? 'drop' : ''} ${s.fail ? 'fail' : ''}" data-e="${e.id}" data-i="${i}">
+      <button class="setno ${isW ? 'w' : ''} ${isD ? 'd' : ''}" data-act="settype" aria-label="Type de série">${isW ? 'É' : isD ? '↳' : n}</button>
       <div class="prev">${p ? setChip(p, e.exId) : '–'}</div>
       <input class="in" data-f="w" inputmode="decimal" enterkeyhint="next" autocomplete="off" value="${fmtIn(s.w)}" placeholder="${fmtIn(ph.w)}" aria-label="Charge en kg">
       <input class="in" data-f="r" inputmode="numeric" enterkeyhint="done" autocomplete="off" value="${s.r ?? ''}" placeholder="${ph.r}" aria-label="Répétitions">
@@ -893,9 +902,9 @@ function entryHtml(e) {
   return `<section class="entry" data-e="${e.id}"><div class="eh"><b>${esc(exName(e.exId))}<small>${esc(m)}</small></b>${editing() ? '' : `<button class="ehrest" data-act="restex" data-id="${e.exId}">⏱ ${restLabel(restFor(e.exId))}</button>`}${eyeBtn(ex(e.exId), 'x')}<button class="x" data-act="rmex" aria-label="Retirer l'exercice">✕</button></div>
     ${editing() ? '' : suggHtml(e)}
     <div class="sethead ${cfg.rir ? 'r6' : ''}"><span>SÉRIE</span><span>PRÉC.</span><span>KG</span><span>REPS</span>${cfg.rir ? '<span>RIR</span>' : ''}<span></span></div>${rows}
-    ${cfg.tipW ? '' : '<div class="tip"><span>Touche le numéro d’une série pour la passer en échauffement, et inversement.</span><button class="x" data-act="tipw" aria-label="Compris">✕</button></div>'}
+    ${cfg.tipW ? '' : '<div class="tip"><span>Touche le numéro d’une série pour choisir son type : normale, échauffement, dégressive, ou menée à l’échec.</span><button class="x" data-act="tipw" aria-label="Compris">✕</button></div>'}
     <div class="setbtns"><button data-act="addwarm">+ Échauffement</button><button data-act="rmwarm">− Échauffement</button></div>
-    <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button></div>
+    <div class="setbtns"><button data-act="addset">+ Série</button><button data-act="rmset">− Série</button><button data-act="adddrop" class="dropb">+ Dégressive</button></div>
     <textarea class="note-in" data-f="note" rows="2" maxlength="500" placeholder="Commentaire sur cet exercice (aide d'un partenaire, série délestée, blessure…) — lu par le coach IA" aria-label="Commentaire sur l'exercice">${esc(e.note || '')}</textarea></section>`;
 }
 
@@ -1385,6 +1394,22 @@ function setAvatar(file) {
   fr.readAsDataURL(file);
 }
 
+/* ---------- type d'une série ---------- */
+function setTypeSheet(eId, i) {
+  const cw = W(); if (!cw) return;
+  const e = cw.entries.find(x => x.id === eId); if (!e) return;
+  const s = e.sets[i]; if (!s) return;
+  // Une dégressive prolonge une série : il en faut une avant elle.
+  const canDrop = e.sets.slice(0, i).some(x => x.type !== 'W');
+  const opt = (k, title, desc, off) => `<button class="card bm typ ${s.type === k ? 'on' : ''}" ${off ? 'disabled' : ''} data-act="settype-set" data-e="${eId}" data-i="${i}" data-k="${k}"><b>${title}</b><span class="muted">${desc}</span></button>`;
+  sheet(`<h3>Série ${i + 1}</h3>
+    ${opt('N', 'Normale', 'Série de travail, comptée dans ton volume.')}
+    ${opt('W', 'Échauffement', 'Exclue du volume, des records et du décompte des séries.')}
+    ${opt('D', 'Dégressive', canDrop ? 'Enchaînée sans repos après la série précédente, charge réduite. Comptée dans le volume, mais pas comme une série de plus.' : 'Il faut une série de travail avant pour en faire une dégressive.', !canDrop)}
+    <div class="lbl sec">Intensité</div>
+    <button class="card bm typ ${s.fail ? 'on' : ''}" data-act="setfail" data-e="${eId}" data-i="${i}"><b>${s.fail ? '✓ ' : ''}Menée à l’échec</b><span class="muted">Tu n’aurais pas pu faire une répétition de plus. Le coach en tient compte pour la fatigue et la détection de plateau.</span></button>`);
+}
+
 /* ---------- feuilles (sheets) ---------- */
 function openRestSheet(exId) {
   const cur = restMap()[exId] || 0;
@@ -1586,7 +1611,11 @@ function toggleCheck(row) {
     const cur = e.sets.filter(x => x.done && x !== s && x.w > 0).map(x => setW(x));
     const ref = Math.max(exHistory(e.exId).reduce((a, h) => Math.max(a, Math.max(...h.sets.map(x => setW(x)))), 0), ...cur, 0);
     if (ref > 10 && s.w > ref * 1.5 && !confirm(`${fmt(s.w)} kg sur ${exName(e.exId)} ? Ton maximum enregistré est ${fmt(ref)} kg. Valider quand même ?`)) return;
-    s.done = true; s.ts = Date.now(); if (s.type !== 'W' && !editing()) startRest(restFor(e.exId));
+    s.done = true; s.ts = Date.now();
+    // Une dégressive s'enchaîne sans repos : on ne déclenche le minuteur que
+    // si la série n'est pas prolongée par un segment dégressif.
+    const nxt = e.sets[i + 1], chained = nxt && nxt.type === 'D';
+    if (s.type !== 'W' && !chained && !editing()) startRest(restFor(e.exId));
   } else s.done = false;
   persist(); render();
 }
@@ -2097,7 +2126,10 @@ document.addEventListener('click', async ev => {
     case 'rmwarm': { const e = entry(); const k = e.sets.map(x => x.type).lastIndexOf('W'); if (k >= 0) { e.sets.splice(k, 1); persist(); render(); } break; }
     case 'addset': entry().sets.push(newSet()); persist(); render(); break;
     case 'rmset': { const e = entry(); if (e.sets.length > 1) { const s0 = e.sets.pop(); persist(); render(); if (s0.done) undoable('Série supprimée.', () => { const e2 = W() && W().entries.find(x => x.id === e.id); if (e2) { e2.sets.push(s0); persist(); render(); } }); } break; }
-    case 'settype': { const row = t.closest('.set'), s = W().entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.type = s.type === 'W' ? 'N' : 'W'; persist(); render(); break; }
+    case 'settype': { const row = t.closest('.set'); setTypeSheet(row.dataset.e, +row.dataset.i); break; }
+    case 'settype-set': { const e2 = W().entries.find(x => x.id === t.dataset.e), s2 = e2.sets[+t.dataset.i]; s2.type = t.dataset.k; if (s2.type === 'W') s2.fail = false; persist(); closeSheet(); render(); break; }
+    case 'setfail': { const e3 = W().entries.find(x => x.id === t.dataset.e), s3 = e3.sets[+t.dataset.i]; s3.fail = !s3.fail; if (s3.fail && s3.type === 'W') s3.type = 'N'; persist(); setTypeSheet(t.dataset.e, +t.dataset.i); render(); break; }
+    case 'adddrop': { const e4 = entry(); if (e4 && e4.sets.some(x => x.type !== 'W')) { e4.sets.push({ ...newSet(), type: 'D' }); persist(); render(); } break; }
     case 'check': toggleCheck(t.closest('.set')); break;
     case 'rir': { const row = t.closest('.set'), s = W().entries.find(x => x.id === row.dataset.e).sets[+row.dataset.i]; s.rir = s.rir == null ? 0 : s.rir >= 4 ? null : s.rir + 1; persist(); render(); break; }
     case 'restex': openRestSheet(id); break;

@@ -407,3 +407,14 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .yfoot span{color:var(--mute);font-size:13px}
 .yfoot b{font:700 18px var(--sans);letter-spacing:-.02em}
 .linkbtn.yedit{float:right;color:var(--red);font:500 13px var(--sans)}
+
+/* dégressives et échec */
+.set.drop .setno{background:none;border-color:transparent;color:var(--red);font-size:15px}
+.set.drop{margin-left:14px}
+.set.fail .setno{box-shadow:inset 0 0 0 1.5px #E0A42A}
+.setbtns .dropb{color:var(--red)}
+.card.bm.typ{display:block;text-align:left;width:100%;margin-bottom:8px}
+.card.bm.typ b{display:block;font-size:15.5px;margin-bottom:2px}
+.card.bm.typ span{font-size:13px;line-height:1.35;display:block}
+.card.bm.typ.on{border-color:var(--red);background:var(--redbg)}
+.card.bm.typ:disabled{opacity:.45}
