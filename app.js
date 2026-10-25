@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v24';
+const VERSION = 'v25';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -171,8 +171,8 @@ const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
 // Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}', autoRev: true, revWk: '', revTxt: '' };
-const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt', 'autoRev', 'revWk', 'revTxt'];
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}', autoRev: true, revWk: '', revTxt: '', avatar: '' };
+const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt', 'autoRev', 'revWk', 'revTxt', 'avatar'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
 const storeCfg = () => { try { localStorage.setItem('lift.cfg', JSON.stringify(cfg)); } catch (e) { } };
@@ -193,7 +193,7 @@ const loadAnalysis = () => { try { return JSON.parse(localStorage.getItem('lift.
 const S = {
   tab: 'train', exercises: [], custom: [], workouts: [], routines: [], active: null,
   chat: [], facts: [], body: [], chatBusy: false, chatErr: '', chatDraft: '', chatImg: null, memoSug: [], bodyBusy: false, bodyMsg: '', bodyMetric: 'weight', sub: '', pm: 'dur',
-  prs: [], cal: { z: 'm', ref: Date.now() }, volZ: 7,
+  prs: [], cal: { z: 'm', ref: Date.now() }, volZ: 7, jz: 'list', cz: 'chat',
   friends: [], shared: {}, sharedUnsubs: {}, inbox: [], friend: '', fr: { q: '', results: [], msg: '', busy: false },
   user: null, authReady: false, loading: false, setup: false, syncErr: '',
   auth: { mode: 'login', err: '', info: '', busy: false, email: '' }
@@ -773,7 +773,8 @@ const ICONS = {
   profile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>',
   coach: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>'
 };
-const TABS = [['train', 'Séance'], ['history', 'Historique'], ['chat', 'Chat'], ['profile', 'Profil']];
+const TABS = [['train', 'Séance'], ['journal', 'Journal'], ['coach', 'Coach'], ['friends', 'Amis'], ['profile', 'Profil']];
+ICONS.journal = ICONS.cal; ICONS.coach = ICONS.chat;
 
 function render() {
   const y = window.scrollY;
@@ -785,10 +786,10 @@ function render() {
   else {
     tabs = true;
     if (S.active) sign = '<div class="sign on"><i></i>ON AIR</div>';
-    body = syncBanner() + { train: viewTrain, history: viewHistory, chat: viewChat, profile: viewProfile }[S.tab]();
+    body = syncBanner() + { train: viewTrain, journal: viewJournal, coach: viewCoach, friends: viewFriendsTab, profile: viewProfile }[S.tab]();
   }
   $('#app').innerHTML = `<header class="top"><div class="logo">LIFT</div>${S.user && !S.loading ? sign : ''}</header><main>${body}</main>`;
-  $('#tabs').innerHTML = !tabs ? '' : TABS.map(([k, l]) => `<button class="tab ${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${ICONS[k]}<span>${l}</span>${k === 'train' && S.active ? '<b class="dot"></b>' : ''}</button>`).join('');
+  $('#tabs').innerHTML = !tabs ? '' : TABS.map(([k, l]) => `<button class="tab ${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${ICONS[k]}<span>${l}</span>${k === 'train' && S.active ? '<b class="dot"></b>' : ''}${k === 'friends' && friendBadge() ? `<i class="badge tb">${friendBadge()}</i>` : ''}</button>`).join('');
   window.scrollTo(0, y);
 }
 
@@ -905,6 +906,27 @@ function workoutCard(w) {
     ${mus.length ? `<div class="s">${esc(mus.join(' · '))}</div>` : ''}</button>`;
 }
 
+/* ---------- Journal : historique et calendrier réunis ---------- */
+function viewJournal() {
+  const z = S.jz === 'cal' ? 'cal' : 'list';
+  const seg = `<div class="seg">${[['list', 'Liste'], ['cal', 'Calendrier']].map(([k, l]) => `<button class="${z === k ? 'on' : ''}" data-act="jz" data-k="${k}">${l}</button>`).join('')}</div>`;
+  return seg + (z === 'cal' ? viewCalendar() : viewHistory());
+}
+
+/* ---------- Coach : conversation et analyses ---------- */
+function viewCoach() {
+  const z = S.cz === 'an' ? 'an' : 'chat';
+  const seg = `<div class="seg">${[['chat', 'Conversation'], ['an', 'Analyses']].map(([k, l]) => `<button class="${z === k ? 'on' : ''}" data-act="cz" data-k="${k}">${l}</button>`).join('')}</div>`;
+  if (z === 'chat') return seg + viewChat();
+  const a = loadAnalysis();
+  return seg + `${weekRevCard()}
+  <div class="lbl sec">Analyse de progression</div>
+  <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Gemini analyse tes 6 dernières semaines (régularité, progression, volume par muscle) et propose un plan pour les 2 prochaines.</p>
+  <button class="btn primary" data-act="analyze" id="anbtn">Analyser ma progression</button><div id="anout">${a ? `<div class="review">${md(a.text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>` : ''}</div></section>`;
+}
+
+function viewFriendsTab() { return S.sub === 'friend' ? viewFriend() : viewFriends(); }
+
 function viewHistory() {
   const fw = finished().reverse();
   if (!fw.length) return '<p class="empty">Aucune séance terminée pour l’instant. Ton historique apparaîtra ici.</p>';
@@ -997,14 +1019,10 @@ async function maybeWeekReview() {
 }
 
 function viewProgress() {
-  const fw = finished(), a = loadAnalysis();
+  const fw = finished();
   const ids = [...new Set(fw.flatMap(w => w.entries.map(e => e.exId)))];
   const rows = ids.map(id => ({ id, h: exHistory(id) })).filter(r => r.h.length).sort((a, b) => b.h[b.h.length - 1].t - a.h[a.h.length - 1].t);
-  return `${weekRevCard()}
-  <div class="lbl sec">Analyse de progression</div>
-  <section class="card"><p class="muted" style="margin:0 0 12px;font-size:14px">Gemini analyse tes 6 dernières semaines (régularité, progression, volume par muscle) et propose un plan pour les 2 prochaines.</p>
-  <button class="btn primary" data-act="analyze" id="anbtn">Analyser ma progression</button><div id="anout">${a ? `<div class="review">${md(a.text)}<div class="meta">${new Date(a.ts).toLocaleDateString('fr-FR')} · ${esc(a.model)}</div></div>` : ''}</div></section>
-  ${volCard()}
+  return `${volCard()}
   <div class="lbl sec">Exercices</div>
   ${rows.map(r => {
     const last = r.h[r.h.length - 1], ser = r.h.slice(-8).map(x => metric(x.best)), d = ser.length > 1 && ser[0] > 0 ? (ser[ser.length - 1] / ser[0] - 1) * 100 : null;
@@ -1018,7 +1036,7 @@ function viewSettings() {
   <div class="lbl" style="margin-bottom:10px">Compte</div>
   <section class="card"><b>Amis et partage</b><div class="muted" style="font-size:13px;margin:4px 0 10px">Pseudo : ${cfg.handle ? '<b>@' + esc(cfg.handle) + '</b>' : 'non choisi'}</div><div class="row"><button class="btn" data-act="handle-open">${cfg.handle ? 'Changer de pseudo' : 'Choisir un pseudo'}</button><button class="btn" data-act="share-open">Ce que je partage</button></div></section>
   <section class="card"><div class="row" style="align-items:center"><div style="min-width:0"><b>${esc(cfg.pseudo || 'Mon compte')}</b><div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis">${esc(S.user ? S.user.email : '')}</div>
-    <div style="font:600 11px var(--mono);letter-spacing:.14em;margin-top:6px" class="${navigator.onLine && !S.syncErr ? 'up' : 'down'}">${navigator.onLine && !S.syncErr ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</div></div>
+    <div style="font:500 13px var(--sans);margin-top:6px" class="${navigator.onLine && !S.syncErr ? 'up' : 'down'}">${navigator.onLine && !S.syncErr ? '● Synchronisé' : '● Hors ligne'}</div></div>
     <button class="btn sm" style="flex:none;width:auto" data-act="logout">Se déconnecter</button></div></section>
 
   <div class="lbl sec">Mon objectif</div>
@@ -1171,6 +1189,41 @@ function toastMsg(msg, act) {
 }
 function doUndo() { const f = undoFn; undoFn = null; clearTimeout(undoT); $('#toast').classList.remove('on'); if (f) f(); }
 
+/* ---------- photo de profil ----------
+   Recadrée au carré et compressée dans le navigateur, puis stockée dans le
+   compte (quelques kilo-octets) : elle suit l'utilisateur d'un appareil à
+   l'autre et s'affiche chez ses amis s'il partage. */
+function avatarSheet() {
+  sheet(`<h3>Ma photo</h3>
+    <div style="display:flex;justify-content:center;margin:4px 0 16px">${avatarImg(cfg.pseudo, cfg.avatar, 'xl')}</div>
+    <button class="btn primary" data-act="avatar-pick">${cfg.avatar ? 'Changer la photo' : 'Choisir une photo'}</button>
+    ${cfg.avatar ? '<button class="btn danger-text" data-act="avatar-del">Retirer la photo</button>' : ''}
+    <small class="note">Elle est recadrée au carré et réduite avant d'être enregistrée dans ton compte. Tes amis la voient si tu partages ton activité.</small>`);
+}
+const AV_PX = 256;
+function setAvatar(file) {
+  if (!/^image\//.test(file.type)) { alert('Choisis une image.'); return; }
+  const fr = new FileReader();
+  fr.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const side = Math.min(im.width, im.height);
+      const c = document.createElement('canvas'); c.width = c.height = AV_PX;
+      const x = c.getContext('2d');
+      x.imageSmoothingQuality = 'high';
+      x.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, AV_PX, AV_PX);
+      let q = .72, url = c.toDataURL('image/jpeg', q);
+      while (url.length > 90000 && q > .35) { q -= .12; url = c.toDataURL('image/jpeg', q); }
+      if (url.length > 120000) { alert("Cette image est trop lourde même après compression. Essaie-en une autre."); return; }
+      cfg.avatar = url; saveCfg(); closeSheet(); render(); schedulePush(true);
+    };
+    im.onerror = () => alert("Image illisible.");
+    im.src = fr.result;
+  };
+  fr.onerror = () => alert("Lecture du fichier impossible.");
+  fr.readAsDataURL(file);
+}
+
 /* ---------- feuilles (sheets) ---------- */
 function openRestSheet(exId) {
   const cur = restMap()[exId] || 0;
@@ -1259,7 +1312,7 @@ async function runReview(id) {
     const text = await gemini(sessionPrompt(w));
     w.review = { text, ts: Date.now(), model: cfg.model }; put('workouts', w);
     if (box()) box().innerHTML = reviewHtml(w);
-    if (S.tab === 'history') render();
+    if (S.tab === 'journal') render();
   } catch (e) { if (box()) box().innerHTML = reviewHtml(w, e.message); }
 }
 
@@ -1468,7 +1521,7 @@ function applyInbox(list) {
 /* partage : copie réduite de mes données, lisible uniquement par mes amis acceptés (selon mes choix) */
 function buildShared() {
   const fw = finished(), o = {
-    uid: S.user.uid, pseudo: cfg.pseudo || cfg.handle, handle: cfg.handle, updatedAt: Date.now(),
+    uid: S.user.uid, pseudo: cfg.pseudo || cfg.handle, handle: cfg.handle, av: cfg.avatar || '', updatedAt: Date.now(),
     flags: { act: !!cfg.shAct, rec: !!cfg.shRec, rcd: !!cfg.shRcd, live: !!cfg.shLive, w: !!cfg.shW }
   };
   if (cfg.shAct) {
@@ -1578,22 +1631,24 @@ async function addFriend(uid, pseudo) {
 }
 
 /* pages */
-const avatar = (n, cls = '') => `<div class="avatar ${cls}">${esc((n || '?').charAt(0).toUpperCase())}</div>`;
+const avatarImg = (n, src, cls = '') => `<div class="avatar ${cls}">${src ? `<img src="${esc(src)}" alt="">` : esc((n || '?').charAt(0).toUpperCase())}</div>`;
+// Avatar d'un ami : sa photo si elle est partagée, sinon son initiale.
+const avatar = (n, cls = '', uid = '') => avatarImg(n, uid && S.shared[uid] ? S.shared[uid].av : '', cls);
 function viewFriends() {
-  if (!cfg.handle) return subPage('Amis', `<section class="card"><p class="muted" style="margin:0 0 12px">Pour trouver tes amis et être trouvé, choisis d'abord un pseudo unique.</p><button class="btn primary" data-act="handle-open">Choisir mon pseudo</button></section>`);
+  if (!cfg.handle) return `<section class="card"><p class="muted" style="margin:0 0 12px">Pour trouver tes amis et être trouvé, choisis d'abord un pseudo unique.</p><button class="btn primary" data-act="handle-open">Choisir mon pseudo</button></section>`;
   const inc = incomingReq(), out = outgoingReq(), fr = friendsAccepted();
-  return subPage('Amis', `<div class="muted" style="margin:-4px 0 10px;font-size:14px">Ton pseudo : <b>${esc(cfg.pseudo || cfg.handle)}</b> · <button class="linkbtn" data-act="handle-open">changer</button></div>
+  return `<div class="muted" style="margin:-4px 0 10px;font-size:14px">Ton pseudo : <b>${esc(cfg.pseudo || cfg.handle)}</b> · <button class="linkbtn" data-act="handle-open">changer</button></div>
     <section class="card"><input id="fr-q" class="field" placeholder="Rechercher un pseudo" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(S.fr.q)}" style="margin-bottom:6px"><div id="fr-res">${frResultsHtml()}</div></section>
     ${inc.length ? `<div class="lbl sec">Demandes reçues</div>${inc.map(f => { const u = otherUid(f); return `<div class="card frow">${avatar(friendName(u, f), 'sm')}<b>${esc(friendName(u, f))}</b><button class="btn sm primary" data-act="fr-accept" data-id="${u}">Accepter</button><button class="btn sm" data-act="fr-remove" data-id="${u}" data-c="0">Refuser</button></div>`; }).join('')}` : ''}
     ${S.inbox.length ? `<div class="lbl sec">Séances reçues (${S.inbox.length})</div>${S.inbox.map(m => `<button class="card bm" data-act="inbox-open" data-id="${m.id}"><b>${esc(m.name)}</b><span class="muted">de ${esc(m.fromPseudo || 'un ami')} · ${m.exercises.length} exercice${m.exercises.length > 1 ? 's' : ''} · ${fmtDate(m.ts)}</span></button>`).join('')}` : ''}
     <div class="lbl sec">Mes amis (${fr.length})</div>
-    ${fr.map(f => { const u = otherUid(f), sh = S.shared[u], live = sh && sh.live; return `<button class="card frow" data-act="friend-open" data-id="${u}">${avatar(friendName(u, f), 'sm')}<span class="fn"><b>${esc(friendName(u, f))}</b>${live ? `<small class="onair">● ON AIR · ${esc(live.name || '')}</small>` : ''}</span><span class="muted">›</span></button>`; }).join('') || '<p class="empty">Aucun ami pour l’instant. Cherche un pseudo ci-dessus.</p>'}
+    ${fr.map(f => { const u = otherUid(f), sh = S.shared[u], live = sh && sh.live; return `<button class="card frow" data-act="friend-open" data-id="${u}">${avatar(friendName(u, f), 'sm', u)}<span class="fn"><b>${esc(friendName(u, f))}</b>${live ? `<small class="onair">● ON AIR · ${esc(live.name || '')}</small>` : ''}</span><span class="muted">›</span></button>`; }).join('') || '<p class="empty">Aucun ami pour l’instant. Cherche un pseudo ci-dessus.</p>'}
     ${out.length ? `<div class="lbl sec">Demandes envoyées</div>${out.map(f => { const u = otherUid(f); return `<div class="card frow">${avatar(friendName(u, f), 'sm')}<b>${esc(friendName(u, f))}</b><button class="btn sm" data-act="fr-remove" data-id="${u}" data-c="0">Annuler</button></div>`; }).join('')}` : ''}
-    <button class="btn" style="margin-top:14px" data-act="share-open">Ce que je partage</button>`);
+    <button class="btn" style="margin-top:14px" data-act="share-open">Ce que je partage</button>`;
 }
 function viewFriend() {
   const uid = S.friend, f = S.friends.find(x => x.users.includes(uid) && x.status === 'accepted');
-  if (!f) { S.sub = 'friends'; return viewFriends(); }
+  if (!f) { S.sub = ''; return viewFriends(); }
   const d = S.shared[uid], name = friendName(uid, f);
   let body = '';
   if (!d) body = '<p class="empty">Chargement…</p>';
@@ -1611,9 +1666,9 @@ function viewFriend() {
     if (d.showcase && d.showcase.length) body += `<div class="lbl sec">Ses records</div>${d.showcase.map(r => `<div class="card prc"><div class="prc-t"><b>${esc(r.nm)}</b><small>${esc(r.mu)}${r.ts ? ' · ' + fmtDate(r.ts) : ''}</small></div><div class="prc-v"><b>${r.w > 0 ? fmt(r.w) + ' kg' : 'PDC'}</b><span>× ${r.r}</span></div></div>`).join('')}`;
     if (d.records) body += `<div class="lbl sec">Meilleures perfs</div>${d.records.map(r => `<div class="card prow"><div class="meta"><b>${esc(r.nm)}</b><small>${esc(r.mu)} · ${fmtDate(r.ts)}</small></div><div class="val">${fmt(r.w)} × ${r.r}</div></div>`).join('') || '<p class="empty">Aucun record.</p>'}`;
   }
-  return subPage(esc(name), `<div class="phead">${avatar(name)}<div class="pinfo"><b>${esc(name)}</b><small class="muted" style="font-weight:500;letter-spacing:.06em">@${esc((d && d.handle) || '')}</small></div></div>${body}
+  return subPage(esc(name), `<div class="phead">${avatar(name, '', uid)}<div class="pinfo"><b>${esc(name)}</b><small class="muted" style="font-weight:500;letter-spacing:.06em">@${esc((d && d.handle) || '')}</small></div></div>${body}
     <button class="btn" style="margin-top:16px" data-act="send-open" data-id="">Envoyer une de mes séances</button>
-    <button class="btn danger-text" data-act="fr-remove" data-id="${uid}" data-c="1">Retirer cet ami</button>`, 'friends', 'Amis');
+    <button class="btn danger-text" data-act="fr-remove" data-id="${uid}" data-c="1">Retirer cet ami</button>`, '', 'Amis');
 }
 function friendWorkoutSheet(uid, wid) {
   const d = S.shared[uid], w = d && d.recent && d.recent.find(x => x.id === wid); if (!w) return;
@@ -1767,12 +1822,12 @@ function viewCalendar() {
     }).join('');
   }
   const st = streakWeeks();
-  return subPage('Calendrier', `${chips}
+  return `${chips}
     <div class="stats pstats"><div class="stat"><b>${count}</b><span>${c.z === 'y' ? 'Cette année' : c.z === 'm' ? 'Ce mois' : 'Cette semaine'}</span></div>
     <div class="stat"><b>${st}</b><span>Semaine${st > 1 ? 's' : ''} d’affilée</span></div>
     <div class="stat"><b>${finished().length}</b><span>Au total</span></div></div>
     <section class="card">${body}</section>
-    <p class="muted" style="font-size:13px">Rouge : jour avec une séance. Touche un jour pour l’ouvrir.</p>`);
+    <p class="muted" style="font-size:13px">Rouge : jour avec une séance. Touche un jour pour l’ouvrir.</p>`;
 }
 
 /* ---------- suggestion de charge (double progression, calcul local) ---------- */
@@ -1811,7 +1866,7 @@ document.addEventListener('click', async ev => {
   unlockAudio();
   const a = t.dataset.act, id = t.dataset.id, entry = () => W().entries.find(x => x.id === t.closest('.entry').dataset.e);
   switch (a) {
-    case 'tab': S.tab = t.dataset.t; S.sub = ''; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'chat') scrollEnd(); break;
+    case 'tab': S.tab = t.dataset.t; S.sub = ''; closeSheet(); render(); window.scrollTo(0, 0); if (S.tab === 'coach' && S.cz !== 'an') scrollEnd(); break;
     case 'sub': S.sub = t.dataset.s || ''; closeSheet(); render(); window.scrollTo(0, 0); break;
     case 'pr-add': openPicker(ids => prForm({ exId: ids[0] })); break;
     case 'pr-quick': { const b = computedBests().find(x => x.exId === id); if (b) prForm({ exId: b.exId, w: b.w, r: b.r, ts: b.ts }); break; }
@@ -1827,7 +1882,7 @@ document.addEventListener('click', async ev => {
     case 'share-open': openShareSettings(); break;
     case 'fr-add': addFriend(id, t.dataset.p); break;
     case 'fr-accept': try { await backend.acceptFriend(meUid(), id); if (!cfg.shAsked) openShareSettings(); } catch (e) { alert('Impossible d’accepter (connexion ?).'); } break;
-    case 'fr-remove': if (t.dataset.c !== '1' || confirm('Retirer cet ami ? Il ne verra plus tes données.')) { try { await backend.removeFriendship(meUid(), id); if (S.friend === id) { S.friend = ''; S.sub = 'friends'; } } catch (e) { alert('Action impossible (connexion ?).'); } } break;
+    case 'fr-remove': if (t.dataset.c !== '1' || confirm('Retirer cet ami ? Il ne verra plus tes données.')) { try { await backend.removeFriendship(meUid(), id); if (S.friend === id) { S.friend = ''; S.sub = ''; } } catch (e) { alert('Action impossible (connexion ?).'); } } break;
     case 'friend-open': S.friend = id; S.sub = 'friend'; render(); window.scrollTo(0, 0); break;
     case 'fworkout': friendWorkoutSheet(S.friend, id); break;
     case 'fw-routine': { const d = S.shared[t.dataset.u], w = d && d.recent && d.recent.find(x => x.id === id); if (w && saveRoutineFrom(w.name, w.entries)) { closeSheet(); alert('Routine enregistrée. Retrouve-la dans l’onglet Séance.'); } break; }
@@ -1918,6 +1973,11 @@ document.addEventListener('click', async ev => {
     case 'analyze': analyze(); break;
     case 'testkey': testKey(); break;
     case 'volz': S.volZ = +t.dataset.n; render(); break;
+    case 'avatar-open': avatarSheet(); break;
+    case 'avatar-pick': $('#avatarfile').click(); break;
+    case 'avatar-del': cfg.avatar = ''; saveCfg(); closeSheet(); render(); schedulePush(true); break;
+    case 'jz': S.jz = t.dataset.k; render(); window.scrollTo(0, 0); break;
+    case 'cz': S.cz = t.dataset.k; render(); window.scrollTo(0, 0); if (S.cz === 'chat') scrollEnd(); break;
     case 'toastx': $('#toast').classList.remove('on'); break;
     case 'gorev': $('#toast').classList.remove('on'); S.sub = 'progress'; render(); window.scrollTo(0, 0); break;
     case 'forceupdate': await forceUpdate(); break;
@@ -1984,6 +2044,7 @@ document.addEventListener('keydown', ev => {
   if (nx) nx.focus(); else ev.target.blur();
 });
 $('#importfile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) importData(f); });
+$('#avatarfile').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) setAvatar(f); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wake(); tickRest(); checkStale(); } else flush(); });
 
 setInterval(() => { const c = $('#clock'); if (c && S.active) c.textContent = clock(Date.now() - S.active.startedAt); }, 1000);
@@ -2110,7 +2171,7 @@ function viewChat() {
   const msgs = S.chat.map(m => `<div class="msg ${m.role === 'model' ? 'ai' : 'me'}">${m.role === 'model' ? md(m.text) : esc(m.text).replace(/\n/g, '<br>')}${m.img ? '<div class="imgtag">📷 image envoyée (non conservée)</div>' : ''}</div>`).join('');
   const starters = ['Propose-moi un programme pour la semaine', 'Quels sont mes points faibles ?', 'Que manger avant et après l’entraînement ?'];
   const memo = S.memoSug.map((m, i) => `<div class="memo"><span>🧠 Retenir : « ${esc(m)} »</span><button class="btn sm primary" data-act="memo-yes" data-i="${i}">Retenir</button><button class="btn sm" data-act="memo-no" data-i="${i}">Non</button></div>`).join('');
-  return `<div class="row chat-top"><b>Coach IA</b><button class="btn sm" data-act="memo-open">🧠 Mémoire (${S.facts.length})</button><button class="btn sm" data-act="chat-clear" ${S.chat.length ? '' : 'disabled'}>Effacer</button></div>
+  return `<div class="row chat-top"><button class="btn sm" data-act="memo-open">🧠 Mémoire (${S.facts.length})</button><button class="btn sm" data-act="chat-clear" ${S.chat.length ? '' : 'disabled'}>Effacer</button></div>
   <div class="chat">${msgs || `<div class="muted chat-empty">Pose une question sur un exercice, un programme, la nutrition… Le coach connaît ton profil, tes séances et ta composition corporelle, et se souvient de la conversation.<div class="chips2" style="margin-top:12px">${starters.map(q => `<button class="sc" data-act="chat-ex" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`}
     ${S.chatBusy ? '<div class="msg ai"><div class="loading"><i></i>Le coach réfléchit…</div></div>' : ''}${memo}${S.chatErr ? `<div class="err">${esc(S.chatErr)}</div>` : ''}</div>
   <div class="composer">${S.chatImg ? '<div class="attached">📷 Image jointe (envoyée à Gemini, non conservée) <button data-act="chat-rmimg">✕</button></div>' : ''}
@@ -2285,27 +2346,22 @@ function viewProfile() {
   if (S.sub === 'body') return subPage('Corps', viewBody());
   if (S.sub === 'settings') return subPage('Réglages', viewSettings());
   if (S.sub === 'records') return viewRecords();
-  if (S.sub === 'calendar') return viewCalendar();
-  if (S.sub === 'friends') return viewFriends();
-  if (S.sub === 'friend') return viewFriend();
   const fw = finished(), name = cfg.pseudo || (S.user && S.user.email ? S.user.email.split('@')[0] : 'Moi');
   const totalVol = fw.reduce((t, w) => t + wVol(w), 0), totalSets = fw.reduce((t, w) => t + wSets(w), 0);
   const online = navigator.onLine && !S.syncErr;
-  return `<div class="phead"><div class="avatar">${esc(name.charAt(0).toUpperCase())}</div>
-      <div class="pinfo"><b>${esc(name)}</b><small class="${online ? 'up' : 'down'}">${online ? '● SYNCHRONISÉ' : '● HORS LIGNE / ERREUR'}</small></div>
+  return `<div class="phead"><button class="avatar av-edit" data-act="avatar-open" aria-label="Changer ma photo">${cfg.avatar ? `<img src="${esc(cfg.avatar)}" alt="">` : esc(name.charAt(0).toUpperCase())}<i>✎</i></button>
+      <div class="pinfo"><b>${esc(name)}</b><small class="${online ? 'up' : 'down'}">${online ? '● Synchronisé' : '● Hors ligne'}</small></div>
       <button class="x gear" data-act="sub" data-s="settings" aria-label="Réglages">⚙</button></div>
     <div class="stats pstats"><div class="stat"><b>${fw.length}</b><span>Séances</span></div><div class="stat"><b>${totalSets.toLocaleString('fr-FR')}</b><span>Séries</span></div><div class="stat"><b>${totalVol >= 1000 ? fmt(Math.round(totalVol / 100) / 10) + ' t' : Math.round(totalVol) + ' kg'}</b><span>Volume</span></div></div>
     ${profChart()}
     ${S.prs.length ? `<div class="lbl sec">Records</div><div class="prstrip">${prSorted().slice(0, 4).map(p => `<button class="prs-i" data-act="sub" data-s="records"><b>${p.w > 0 ? fmt(p.w) + ' kg' : 'PDC'}</b><span>× ${p.r}</span><small>${esc(exName(p.exId))}</small></button>`).join('')}</div>` : ''}
     <div class="lbl sec">Tableau de bord</div>
     <div class="tiles">
-      <button class="tile" data-act="sub" data-s="records">${ICONS.trophy}<span>Records</span></button>
-      <button class="tile" data-act="sub" data-s="calendar">${ICONS.cal}<span>Calendrier</span></button>
       <button class="tile" data-act="sub" data-s="progress">${ICONS.progress}<span>Statistiques</span></button>
-      <button class="tile" data-act="exbrowse">${ICONS.dumbbell}<span>Exercices</span></button>
+      <button class="tile" data-act="sub" data-s="records">${ICONS.trophy}<span>Records</span></button>
       <button class="tile" data-act="sub" data-s="body">${ICONS.body}<span>Corps</span></button>
-      <button class="tile" data-act="sub" data-s="friends">${ICONS.friends}<span>Amis</span>${friendBadge() ? `<i class="badge">${friendBadge()}</i>` : ''}</button>
-      <button class="tile" data-act="memo-open">${ICONS.chat}<span>Mémoire du coach</span></button>
+      <button class="tile" data-act="exbrowse">${ICONS.dumbbell}<span>Exercices</span></button>
+      <button class="tile" data-act="sub" data-s="settings">${ICONS.profile}<span>Réglages</span></button>
     </div>`;
 }
 const subPage = (title, html, back = '', label = 'Profil') => `<div class="subhead"><button class="back" data-act="sub" data-s="${back}">‹ ${label}</button><b>${title}</b></div>${html}`;
