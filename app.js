@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v26';
+const VERSION = 'v27';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -1024,9 +1024,10 @@ async function maybeWeekReview() {
    barre, la charge est dessinée avec les disques réellement nécessaires ;
    pour une poulie ou une machine, une jauge proportionnelle. */
 const BAR_KG = 20;
-const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
-const PLATE_H = { 25: 23, 20: 21, 15: 18, 10: 15, 5: 12, 2.5: 9, 1.25: 7 };
-const PLATE_F = { 25: '#F03024', 20: '#F03024', 15: '#CF291F', 10: '#CF291F', 5: '#9E201A', 2.5: '#9E201A', 1.25: '#7A1813' };
+// Jeu de disques d'une salle courante : pas de 25 kg, on charge par paires de 20.
+const PLATES = [20, 15, 10, 5, 2.5, 1.25];
+const PLATE_H = { 20: 22, 15: 18, 10: 15, 5: 12, 2.5: 9, 1.25: 7 };
+const PLATE_F = { 20: '#F03024', 15: '#D82B21', 10: '#B8241C', 5: '#8E1D16', 2.5: '#751812', 1.25: '#5E130F' };
 const MO3 = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
 const isBarbell = id => { const e = ex(id); return !!e && (/^Barbell_/.test(e.img || '') || /\(barre\)/i.test(e.name) || /^Soulevé de terre/i.test(e.name)); };
 
