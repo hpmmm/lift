@@ -396,3 +396,14 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
   background:var(--red);color:#fff;font:600 11px var(--sans);font-style:normal;display:flex;
   align-items:center;justify-content:center;border:2px solid var(--bg)}
 .avatar.xl{width:116px;height:116px;font-size:44px}
+
+/* charge sur 12 mois */
+.ycard{padding:14px 16px 12px}
+.yhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.yhead b{font:600 15.5px var(--sans)}
+.yhead small{color:var(--dim2);font-size:11.5px;text-align:right;flex:none}
+.ysvg{display:block;margin:2px 0 6px}
+.yfoot{display:flex;align-items:baseline;justify-content:space-between;border-top:1px solid var(--hair);padding-top:9px}
+.yfoot span{color:var(--mute);font-size:13px}
+.yfoot b{font:700 18px var(--sans);letter-spacing:-.02em}
+.linkbtn.yedit{float:right;color:var(--red);font:500 13px var(--sans)}

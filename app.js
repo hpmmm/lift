@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v25';
+const VERSION = 'v26';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -171,8 +171,8 @@ const LEVELS = ['débutant', 'intermédiaire', 'avancé'];
 
 /* ---------- réglages ---------- */
 // Réglages synchronisés entre appareils (SYNCED). La clé API ne l'est QUE si l'utilisateur coche « synchroniser ma clé » (syncKey) ; le modèle reste propre à l'appareil.
-const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}', autoRev: true, revWk: '', revTxt: '', avatar: '' };
-const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt', 'autoRev', 'revWk', 'revTxt', 'avatar'];
+const DEF = { goal: 'hypertrophie', perWeek: 4, level: 'intermédiaire', apiKey: '', syncKey: false, model: 'gemini-3.5-flash', rest: 90, bw: '', pseudo: '', handle: '', tipW: false, shAct: false, shRec: false, shRcd: false, shLive: false, shW: false, shAsked: false, rir: false, restEx: '{}', exOpt: '{}', autoRev: true, revWk: '', revTxt: '', avatar: '', yearEx: '[]' };
+const SYNCED = ['goal', 'perWeek', 'level', 'bw', 'rest', 'pseudo', 'handle', 'tipW', 'shAct', 'shRec', 'shRcd', 'shLive', 'shW', 'shAsked', 'rir', 'restEx', 'exOpt', 'autoRev', 'revWk', 'revTxt', 'avatar', 'yearEx'];
 let cfg = { ...DEF };
 try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('lift.cfg') || '{}') }; } catch (e) { }
 const storeCfg = () => { try { localStorage.setItem('lift.cfg', JSON.stringify(cfg)); } catch (e) { } };
@@ -1018,11 +1018,171 @@ async function maybeWeekReview() {
   } catch (e) { revTried = false; /* on retentera à la prochaine ouverture */ }
 }
 
+/* ---------- charge sur 12 mois glissants (visuel) ----------
+   Une ligne par mois, la meilleure charge de travail du mois. Un mois sans
+   séance reprend la charge du mois précédent, en grisé. Pour les exercices à
+   barre, la charge est dessinée avec les disques réellement nécessaires ;
+   pour une poulie ou une machine, une jauge proportionnelle. */
+const BAR_KG = 20;
+const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
+const PLATE_H = { 25: 23, 20: 21, 15: 18, 10: 15, 5: 12, 2.5: 9, 1.25: 7 };
+const PLATE_F = { 25: '#F03024', 20: '#F03024', 15: '#CF291F', 10: '#CF291F', 5: '#9E201A', 2.5: '#9E201A', 1.25: '#7A1813' };
+const MO3 = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
+const isBarbell = id => { const e = ex(id); return !!e && (/^Barbell_/.test(e.img || '') || /\(barre\)/i.test(e.name) || /^Soulevé de terre/i.test(e.name)); };
+
+function plateBreak(total, bar = BAR_KG) {
+  let side = Math.round((total - bar) * 100) / 200, out = [];
+  if (!(side > 0)) return out;
+  for (const p of PLATES) while (side >= p - 1e-9 && out.length < 8) { out.push(p); side = Math.round((side - p) * 100) / 100; }
+  return out;
+}
+
+// Meilleure charge de travail mois par mois, report inclus.
+function monthlyLoad(exId, n = 12) {
+  const first = new Date(); first.setDate(1); first.setHours(0, 0, 0, 0);
+  const fw = finished(), out = [];
+  for (let k = n - 1; k >= 0; k--) {
+    const a = new Date(first); a.setMonth(a.getMonth() - k);
+    const b = new Date(a); b.setMonth(b.getMonth() + 1);
+    let best = 0;
+    for (const w of fw) {
+      if (w.startedAt < a.getTime() || w.startedAt >= b.getTime()) continue;
+      for (const e of w.entries) if (e.exId === exId) for (const st of workSets(e)) best = Math.max(best, loadAt(exId, st, w.startedAt));
+    }
+    out.push({ t: a.getTime(), label: MO3[a.getMonth()], v: best || null, real: best > 0 });
+  }
+  let carry = null;
+  for (const r of out) { if (r.v == null) r.v = carry; else carry = r.v; }
+  return out;
+}
+
+function yearSvg(exId, w = 340) {
+  const rows = monthlyLoad(exId), bb = isBarbell(exId);
+  const RH = 30, H = rows.length * RH + 4;
+  const LX = 42, RX = w - 58, GW = 58, bx0 = LX + GW, bx1 = RX - GW;
+  const vals = rows.map(r => r.v).filter(v => v != null);
+  const mx = Math.max(1, ...vals), mn = Math.min(...vals);
+  // base de l'échelle sous le minimum, sinon des charges proches donnent des jauges toutes pleines
+  const base = vals.length > 1 ? Math.max(0, mn - (mx - mn) * 0.9 - mx * 0.04) : 0;
+  const body = rows.map((r, i) => {
+    const y = i * RH + RH / 2, o = r.real ? 1 : .42;
+    let draw = '';
+    if (r.v == null) draw = `<text x="${LX}" y="${y + 4}" fill="#67645F" font-size="11">pas de donnée</text>`;
+    else if (bb) {
+      const pl = plateBreak(r.v);
+      draw = `<rect x="${bx0}" y="${y - 1.5}" width="${bx1 - bx0}" height="3" rx="1.5" fill="#EFEADF" opacity="${o}"/>`;
+      for (const [sign, edge] of [[-1, bx0], [1, bx1]]) {
+        let off = 0;
+        for (const p of pl) {
+          const ph = PLATE_H[p], pw = 6;
+          const x = sign < 0 ? edge - off - pw : edge + off;
+          draw += `<rect x="${x}" y="${y - ph / 2}" width="${pw}" height="${ph}" rx="2" fill="${PLATE_F[p]}" opacity="${o}"/>`;
+          off += pw + 1.5;
+        }
+      }
+      if (!pl.length) draw += `<text x="${bx0 - 6}" y="${y + 4}" text-anchor="end" fill="#67645F" font-size="10" opacity="${o}">barre</text>`;
+    } else {
+      const fw2 = Math.max(6, ((r.v - base) / Math.max(1e-6, mx - base)) * (RX - LX));
+      draw = `<rect x="${LX}" y="${y - 5}" width="${RX - LX}" height="10" rx="5" fill="#1E1E21"/>
+        <rect x="${LX}" y="${y - 5}" width="${fw2}" height="10" rx="5" fill="#F03024" opacity="${o}"/>`;
+    }
+    return `<text x="0" y="${y + 4}" fill="#F03024" font-size="10.5" font-weight="600" opacity="${o}" letter-spacing=".06em">${r.label}</text>
+      ${draw}
+      <text x="${w}" y="${y + 4.5}" text-anchor="end" fill="#F2F1EF" font-size="13.5" font-weight="650" opacity="${o}">${r.v == null ? '–' : fmt(Math.round(r.v * 10) / 10)}</text>
+      ${i ? `<line x1="0" x2="${w}" y1="${i * RH}" y2="${i * RH}" stroke="#FFFFFF" stroke-opacity=".05"/>` : ''}`;
+  }).join('');
+  return { svg: `<g>${body}</g>`, h: H, rows };
+}
+
+function yearCard(exId) {
+  const W = 340, { svg, h, rows } = yearSvg(exId, W);
+  const seen = rows.filter(r => r.v != null);
+  const delta = seen.length > 1 ? Math.round((seen[seen.length - 1].v - seen[0].v) * 10) / 10 : null;
+  return `<section class="card ycard" data-ex="${exId}">
+    <div class="yhead"><b>${esc(exName(exId))}</b><small>${isBarbell(exId) ? 'barre de ' + BAR_KG + ' kg + disques par côté' : 'charge de travail'}</small></div>
+    <svg class="ysvg" viewBox="0 0 ${W} ${h}" width="100%" role="img" aria-label="Charge mois par mois">${svg}</svg>
+    <div class="yfoot"><span>Sur 12 mois</span><b style="color:var(--red)">${delta == null ? '–' : (delta > 0 ? '+' : '') + fmt(delta) + ' kg'}</b></div>
+  </section>`;
+}
+
+const yearExs = () => { try { const a = JSON.parse(cfg.yearEx || '[]'); return Array.isArray(a) ? a.filter(ex).slice(0, 3) : []; } catch (e) { return []; } };
+function yearDefaults() {
+  const n = {};
+  for (const w of finished()) for (const e of w.entries) if (workSets(e).length) n[e.exId] = (n[e.exId] || 0) + 1;
+  return Object.entries(n).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]);
+}
+function yearBlock() {
+  const ids = yearExs().length ? yearExs() : yearDefaults();
+  if (!ids.length) return '';
+  return `<div class="lbl sec">Ta charge sur 12 mois<button class="linkbtn yedit" data-act="year-pick">choisir</button></div>
+    ${ids.map(yearCard).join('')}
+    <button class="btn" data-act="year-img">Exporter en image</button>`;
+}
+function yearPick() {
+  const n = {};
+  for (const w of finished()) for (const e of w.entries) if (workSets(e).length) n[e.exId] = (n[e.exId] || 0) + 1;
+  const list = Object.entries(n).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  const cur = yearExs().length ? yearExs() : yearDefaults();
+  sheet(`<h3>Exercices suivis</h3><p class="muted" style="margin:-8px 0 12px;font-size:14px">Jusqu'à trois exercices. ${list.length} pratiqués.</p>
+    <div class="pk-list">${list.map(id => `<button class="pk-item ${cur.includes(id) ? 'on' : ''}" data-act="year-tog" data-id="${id}"><span class="tick"></span><span class="pk-n">${esc(exName(id))}</span><small>${n[id]} séance${n[id] > 1 ? 's' : ''}</small></button>`).join('')}</div>
+    <button class="btn primary" data-act="closesheet">Terminé</button>`);
+}
+function yearToggle(id) {
+  let cur = yearExs().length ? yearExs() : yearDefaults();
+  cur = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id].slice(-3);
+  cfg.yearEx = JSON.stringify(cur); saveCfg(); yearPick(); render();
+}
+
+// Export : le SVG est autonome (couleurs et tailles en attributs), donc il se
+// rend tel quel dans un canvas, sans dépendre de la feuille de style.
+async function yearImage() {
+  const ids = yearExs().length ? yearExs() : yearDefaults();
+  if (!ids.length) return;
+  const W = 340, PAD = 18, GAP = 22, HEAD = 64;
+  const parts = ids.map(id => ({ id, ...yearSvg(id, W) }));
+  const total = HEAD + parts.reduce((t, p) => t + p.h + GAP + 34, 0) + PAD;
+  const inner = parts.map((p, i) => {
+    const top = HEAD + parts.slice(0, i).reduce((t, q) => t + q.h + GAP + 34, 0);
+    const seen = p.rows.filter(r => r.v != null);
+    const d = seen.length > 1 ? Math.round((seen[seen.length - 1].v - seen[0].v) * 10) / 10 : null;
+    return `<g transform="translate(${PAD},${top})">
+      <text x="0" y="0" fill="#F2F1EF" font-size="15" font-weight="650">${esc(exName(p.id))}</text>
+      <g transform="translate(0,12)">${p.svg}</g>
+      <text x="0" y="${p.h + 28}" fill="#9A9791" font-size="12">Sur 12 mois</text>
+      <text x="${W}" y="${p.h + 28}" text-anchor="end" fill="#F03024" font-size="17" font-weight="700">${d == null ? '–' : (d > 0 ? '+' : '') + fmt(d) + ' kg'}</text></g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W + PAD * 2}" height="${total}" viewBox="0 0 ${W + PAD * 2} ${total}" font-family="-apple-system,system-ui,sans-serif">
+    <rect width="100%" height="100%" fill="#09090B"/>
+    <text x="${PAD}" y="28" fill="#F2F1EF" font-size="19" font-weight="700" letter-spacing=".16em">LIFT</text>
+    <text x="${W + PAD}" y="28" text-anchor="end" fill="#67645F" font-size="12">${new Date().toLocaleDateString('fr-FR')}</text>
+    ${inner}</svg>`;
+  try {
+    const blob = await new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = (W + PAD * 2) * 2; c.height = total * 2;
+        const x = c.getContext('2d'); x.scale(2, 2); x.drawImage(img, 0, 0);
+        c.toBlob(b => b ? res(b) : rej(new Error('rendu impossible')), 'image/png');
+      };
+      img.onerror = () => rej(new Error('rendu impossible'));
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+    const file = new File([blob], `lift-charge-${new Date().toISOString().slice(0, 10)}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Ma charge sur 12 mois' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { alert("Export impossible sur cet appareil."); }
+}
+
 function viewProgress() {
   const fw = finished();
   const ids = [...new Set(fw.flatMap(w => w.entries.map(e => e.exId)))];
   const rows = ids.map(id => ({ id, h: exHistory(id) })).filter(r => r.h.length).sort((a, b) => b.h[b.h.length - 1].t - a.h[a.h.length - 1].t);
-  return `${volCard()}
+  return `${yearBlock()}
+  ${volCard()}
   <div class="lbl sec">Exercices</div>
   ${rows.map(r => {
     const last = r.h[r.h.length - 1], ser = r.h.slice(-8).map(x => metric(x.best)), d = ser.length > 1 && ser[0] > 0 ? (ser[ser.length - 1] / ser[0] - 1) * 100 : null;
@@ -1326,6 +1486,7 @@ function exDetail(id) {
     ${ficheHtml(id)}
     <div class="stats"><div class="stat"><b>${fmt(maxW)} kg</b><span>Charge max</span></div><div class="stat"><b>${bestE > 0 ? fmt(Math.round(bestE * 10) / 10) + ' kg' : '–'}</b><span>Meilleur e1RM</span></div></div>
     ${(() => { const st = stagFor(id); return st ? `<div class="tip plateau"><span>⚠︎</span><span><b>Plateau depuis le ${fmtDate(st.since)}.</b> ${STAG_TIP}</span></div>` : ''; })()}
+    <div class="lbl sec" style="margin-top:16px">Charge sur 12 mois</div>${yearCard(id)}
     <div class="lbl sec" style="margin-top:16px">Progression (${unit})</div>${lineChart(pts, unit)}
     <small class="note">e1RM = charge maximale estimée sur 1 répétition (formule d'Epley). Séries de travail uniquement.</small>
     <div class="lbl sec" style="margin-top:12px">Dernières séances</div>
@@ -1973,6 +2134,9 @@ document.addEventListener('click', async ev => {
     case 'analyze': analyze(); break;
     case 'testkey': testKey(); break;
     case 'volz': S.volZ = +t.dataset.n; render(); break;
+    case 'year-pick': yearPick(); break;
+    case 'year-tog': yearToggle(id); break;
+    case 'year-img': await yearImage(); break;
     case 'avatar-open': avatarSheet(); break;
     case 'avatar-pick': $('#avatarfile').click(); break;
     case 'avatar-del': cfg.avatar = ''; saveCfg(); closeSheet(); render(); schedulePush(true); break;
