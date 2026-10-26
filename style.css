@@ -435,3 +435,7 @@ svg.chart text{fill:var(--mute);font:500 10px var(--mono)}
 .ph-cmp img{width:100%;border-radius:12px;display:block;background:var(--panel2);aspect-ratio:3/4;object-fit:cover}
 .ph-cmp select{margin-top:8px;height:40px;font-size:13.5px}
 .ph-cmp .note{display:block;text-align:center;margin-top:4px}
+
+/* marque dans l'en-tête */
+.logo{display:flex;align-items:center;gap:9px}
+.mark{width:36px;height:21px;flex:none}

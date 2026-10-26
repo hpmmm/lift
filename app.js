@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v29';
+const VERSION = 'v30';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -766,6 +766,11 @@ async function wake() {
 function unwake() { try { wl && wl.release(); } catch (e) { } wl = null; }
 
 /* ---------- vues ---------- */
+// Marque de l'app, reprise de l'icône : barre chargée, gros disques au centre.
+const MARK = `<svg class="mark" viewBox="88 158 336 196" aria-hidden="true">
+  <rect x="96" y="243" width="320" height="26" rx="13" fill="#EFEADF"/>
+  <rect x="150" y="197" width="36" height="118" rx="14" fill="#CD281E"/><rect x="326" y="197" width="36" height="118" rx="14" fill="#CD281E"/>
+  <rect x="196" y="166" width="44" height="180" rx="16" fill="#F03024"/><rect x="272" y="166" width="44" height="180" rx="16" fill="#F03024"/></svg>`;
 const ICONS = {
   train: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.4"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>',
   history: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
@@ -794,7 +799,7 @@ function render() {
     if (S.active) sign = '<div class="sign on"><i></i>ON AIR</div>';
     body = syncBanner() + { train: viewTrain, journal: viewJournal, coach: viewCoach, friends: viewFriendsTab, profile: viewProfile }[S.tab]();
   }
-  $('#app').innerHTML = `<header class="top"><div class="logo">LIFT</div>${S.user && !S.loading ? sign : ''}</header><main>${body}</main>`;
+  $('#app').innerHTML = `<header class="top"><div class="logo">${MARK}LIFT</div>${S.user && !S.loading ? sign : ''}</header><main>${body}</main>`;
   $('#tabs').innerHTML = !tabs ? '' : TABS.map(([k, l]) => `<button class="tab ${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${ICONS[k]}<span>${l}</span>${k === 'train' && S.active ? '<b class="dot"></b>' : ''}${k === 'friends' && friendBadge() ? `<i class="badge tb">${friendBadge()}</i>` : ''}</button>`).join('');
   window.scrollTo(0, y);
 }
