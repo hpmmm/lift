@@ -8,7 +8,7 @@ import { FICHES } from './fiches.js';
 
 /* Version de l'app. À incrémenter à chaque publication, en gardant CACHE
    (dans sw.js) strictement identique : 'lift-cloud-' + VERSION. */
-const VERSION = 'v30';
+const VERSION = 'v31';
 
 /* ---------- utilitaires ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -598,7 +598,7 @@ function sessionPrompt(w) {
     const ws = workSets(e), b = best(ws, e.exId, w.startedAt), h = exHistory(e.exId, w.startedAt), p = h[h.length - 1];
     const wu = e.sets.filter(x => x.done && x.type === 'W' && x.r > 0);
     const rr = restReal(e), st = stagFor(e.exId);
-    let l = `- [${i + 1}e exercice] ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}, ${isCompound(e.exId) ? 'polyarticulaire' : 'isolation'}]${sidesOf(e.exId) > 1 ? ' (charge par côté : le volume compte les deux)' : ''} : ${wu.length ? `échauffement ${wu.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} ; ` : ''}séries de travail ${ws.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} | volume ${fmt(entryVol(e, w.startedAt))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}`;
+    let l = `- [${i + 1}e exercice] ${exName(e.exId)} [${ex(e.exId)?.muscle || '?'}, ${isCompound(e.exId) ? 'polyarticulaire' : 'isolation'}]${sidesOf(e.exId) > 1 ? ' (charge par côté : le volume compte les deux)' : ''} : ${wu.length ? `échauffement ${wu.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} ; ` : ''}${b ? `séries de travail ${ws.map(x => setTxt(x, e.exId, w.startedAt)).join(', ')} | volume ${fmt(entryVol(e, w.startedAt))} kg | e1RM ${fmt(Math.round(b.e * 10) / 10)}` : 'aucune série de travail (échauffement seul, ni volume ni e1RM)'}`;
     if (rr) l += ` | intervalle médian entre séries ${Math.round(rr / 5) * 5} s (repos visé ${restFor(e.exId)} s ; l'intervalle inclut la durée de la série)`;
     if (st) l += ` | PLATEAU : 3 séances sans record`;
     l += p ? ` | séance précédente (${fmtDate(p.t)}) : ${p.sets.map(x => setTxt(x, e.exId, p.t)).join(', ')} (e1RM ${fmt(Math.round(p.best.e * 10) / 10)})` : ' | première fois enregistrée';
@@ -1056,7 +1056,7 @@ async function maybeWeekReview() {
     const text = await gemini(weekRevPrompt(a, b));
     cfg.revTxt = JSON.stringify({ text, ts: Date.now(), week: key, model: cfg.model });
     cfg.revWk = key; saveCfg();
-    if (S.sub === 'progress') render();
+    if (S.tab === 'coach' && S.cz === 'an' && !S.sub) render();
     toastMsg('Ton bilan de la semaine est prêt.', 'gorev');
   } catch (e) { revTried = false; /* on retentera à la prochaine ouverture */ }
 }
@@ -2216,7 +2216,7 @@ document.addEventListener('click', async ev => {
     case 'jz': S.jz = t.dataset.k; render(); window.scrollTo(0, 0); break;
     case 'cz': S.cz = t.dataset.k; render(); window.scrollTo(0, 0); if (S.cz === 'chat') scrollEnd(); break;
     case 'toastx': $('#toast').classList.remove('on'); break;
-    case 'gorev': $('#toast').classList.remove('on'); S.sub = 'progress'; render(); window.scrollTo(0, 0); break;
+    case 'gorev': $('#toast').classList.remove('on'); S.tab = 'coach'; S.cz = 'an'; S.sub = ''; render(); window.scrollTo(0, 0); break;
     case 'forceupdate': await forceUpdate(); break;
     case 'swreload': location.reload(); break;
     case 'export': exportData(); break;
